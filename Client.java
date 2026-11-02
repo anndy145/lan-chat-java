@@ -5,6 +5,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * TCP LAN chat client. Run: java Client <server-ip> <port> <name>
@@ -32,37 +33,59 @@ public class Client {
 
     private static void connect(String host, int port, String name) {
         try (Socket socket = new Socket(host, port);
-             BufferedReader serverInput = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-             PrintWriter serverOutput = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-             BufferedReader keyboard = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+                BufferedReader serverInput = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                PrintWriter serverOutput = new PrintWriter(
+                        new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
+            BufferedReader keyboard = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
             serverOutput.println(name);
             System.out.println("Connected. Type a message and press Enter. Type /quit to leave.");
 
-            Thread receiver = new Thread(() -> receiveMessages(serverInput), "server-receiver");
-            receiver.setDaemon(true);
-            receiver.start();
-
-            String line;
-            while ((line = keyboard.readLine()) != null) {
-                serverOutput.println(line);
-                if ("/quit".equalsIgnoreCase(line.trim())) {
-                    break;
-                }
-            }
+            AtomicBoolean leaving = new AtomicBoolean(false);
+            Thread sender = new Thread(() -> sendMessages(keyboard, serverOutput, socket, leaving), "keyboard-sender");
+            sender.setDaemon(true);
+            sender.start();
+            receiveMessages(serverInput, leaving);
         } catch (IOException exception) {
             System.err.println("Could not connect to " + host + ":" + port + ". " + exception.getMessage());
         }
     }
 
-    private static void receiveMessages(BufferedReader serverInput) {
+    private static void sendMessages(BufferedReader keyboard, PrintWriter serverOutput,
+            Socket socket, AtomicBoolean leaving) {
+        try {
+            String line;
+            while ((line = keyboard.readLine()) != null) {
+                if ("/quit".equalsIgnoreCase(line.trim())) {
+                    leaving.set(true);
+                    serverOutput.println(line);
+                    break;
+                }
+                serverOutput.println(line);
+            }
+        } catch (IOException exception) {
+            System.err.println("Could not read keyboard input: " + exception.getMessage());
+        } finally {
+            leaving.set(true);
+            try {
+                socket.close();
+            } catch (IOException exception) {
+                System.err.println("Could not close connection: " + exception.getMessage());
+            }
+        }
+    }
+
+    private static void receiveMessages(BufferedReader serverInput, AtomicBoolean leaving) {
         try {
             String message;
             while ((message = serverInput.readLine()) != null) {
                 System.out.println(message);
             }
-            System.out.println("Server disconnected.");
         } catch (IOException exception) {
-            System.out.println("Connection closed.");
+            // A socket close can interrupt readLine, including when the user leaves.
+        }
+        if (!leaving.get()) {
+            System.out.println("Server disconnected. Client closing.");
         }
     }
 }

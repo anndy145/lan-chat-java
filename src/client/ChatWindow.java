@@ -33,6 +33,7 @@ public class ChatWindow extends JFrame {
     private final JTextArea chatArea = new JTextArea();
     private final JTextField inputField = new JTextField();
     private final JButton sendButton = new JButton("送出");
+    private final JButton leaveButton = new JButton("離開");
     private final DefaultListModel<String> onlineUsers = new DefaultListModel<>();
 
     // 連線狀態和介面元件只在 Swing 介面執行緒中讀寫。
@@ -62,7 +63,10 @@ public class ChatWindow extends JFrame {
         chatArea.setWrapStyleWord(true);
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
         inputPanel.add(inputField, BorderLayout.CENTER);
-        inputPanel.add(sendButton, BorderLayout.EAST);
+        JPanel buttonsPanel = new JPanel();
+        buttonsPanel.add(sendButton);
+        buttonsPanel.add(leaveButton);
+        inputPanel.add(buttonsPanel, BorderLayout.EAST);
         add(connectionPanel, BorderLayout.NORTH);
         add(new JScrollPane(chatArea), BorderLayout.CENTER);
         JPanel usersPanel = new JPanel(new BorderLayout());
@@ -76,6 +80,7 @@ public class ChatWindow extends JFrame {
 
         connectButton.addActionListener(event -> connect());
         sendButton.addActionListener(event -> sendMessage());
+        leaveButton.addActionListener(event -> leaveChat());
         inputField.addActionListener(event -> sendMessage());
         addWindowListener(new WindowAdapter() {
             @Override
@@ -157,12 +162,23 @@ public class ChatWindow extends JFrame {
             return;
         }
         // 伺服器會把訊息廣播回來，因此此處不重複加到聊天區。
-        output.println(message);
         inputField.setText("");
         if ("/quit".equalsIgnoreCase(message.strip())) {
-            closeConnection();
-            appendMessage("已離開聊天室。");
+            leaveChat();
+        } else {
+            output.println(message);
         }
+    }
+
+    // 通知伺服器離開，並讓畫面回到可重新連線的狀態。
+    private void leaveChat() {
+        if (output == null) {
+            return;
+        }
+        output.println("/quit");
+        closeConnection();
+        inputField.setText("");
+        appendMessage("已離開聊天室。");
     }
 
     private void disconnected(Socket closedSocket, String message) {
@@ -205,6 +221,7 @@ public class ChatWindow extends JFrame {
         connectButton.setEnabled(!connected && !connecting);
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
+        leaveButton.setEnabled(connected);
     }
 
     private void appendMessage(String message) {

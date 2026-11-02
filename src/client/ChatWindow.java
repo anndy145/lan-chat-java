@@ -30,6 +30,7 @@ public class ChatWindow extends JFrame {
     private final JTextField portField = new JTextField("5487");
     private final JTextField nameField = new JTextField();
     private final JButton connectButton = new JButton("連線");
+    private final JButton viewUsersButton = new JButton("查看線上使用者");
     private final JTextArea chatArea = new JTextArea();
     private final JTextField inputField = new JTextField();
     private final JButton sendButton = new JButton("送出");
@@ -71,7 +72,10 @@ public class ChatWindow extends JFrame {
         add(connectionPanel, BorderLayout.NORTH);
         add(new JScrollPane(chatArea), BorderLayout.CENTER);
         JPanel usersPanel = new JPanel(new BorderLayout());
-        usersPanel.add(new JLabel("線上使用者"), BorderLayout.NORTH);
+        JPanel usersHeader = new JPanel(new BorderLayout());
+        usersHeader.add(new JLabel("線上使用者"), BorderLayout.NORTH);
+        usersHeader.add(viewUsersButton, BorderLayout.SOUTH);
+        usersPanel.add(usersHeader, BorderLayout.NORTH);
         JScrollPane usersScroll = new JScrollPane(new JList<>(onlineUsers));
         usersScroll.setPreferredSize(new java.awt.Dimension(140, 0));
         usersPanel.add(usersScroll, BorderLayout.CENTER);
@@ -81,14 +85,20 @@ public class ChatWindow extends JFrame {
 
         connectButton.addActionListener(event -> {
             if (observing && output != null) {
-                output.println("@join");
+                String name = nameField.getText().strip();
+                if (name.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "請輸入暱稱。");
+                    return;
+                }
+                output.println("@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
                 observing = false;
                 setConnected(true);
                 appendMessage("已重新加入聊天室。");
             } else {
-                connect();
+                connect(false);
             }
         });
+        viewUsersButton.addActionListener(event -> connect(true));
         sendButton.addActionListener(event -> sendMessage());
         leaveButton.addActionListener(event -> leaveChat());
         inputField.addActionListener(event -> sendMessage());
@@ -100,13 +110,13 @@ public class ChatWindow extends JFrame {
         });
     }
 
-    private void connect() {
+    private void connect(boolean observeOnly) {
         String host = hostField.getText().strip();
         String name = nameField.getText().strip();
         int port;
         try {
             port = Integer.parseInt(portField.getText().strip());
-            if (port < 1 || port > 65535 || host.isEmpty() || name.isEmpty()) {
+            if (port < 1 || port > 65535 || host.isEmpty() || (!observeOnly && name.isEmpty())) {
                 throw new IllegalArgumentException();
             }
         } catch (IllegalArgumentException exception) {
@@ -115,7 +125,7 @@ public class ChatWindow extends JFrame {
         }
 
         connecting = true;
-        connectButton.setEnabled(false);
+        setConnected(false);
         appendMessage("正在連線……");
 
         // 網路連線可能需要等待，放在背景執行緒以免視窗卡住。
@@ -127,7 +137,7 @@ public class ChatWindow extends JFrame {
                         new InputStreamReader(newSocket.getInputStream(), StandardCharsets.UTF_8));
                 PrintWriter writer = new PrintWriter(
                         new OutputStreamWriter(newSocket.getOutputStream(), StandardCharsets.UTF_8), true);
-                writer.println(name);
+                writer.println(observeOnly ? "@observe" : name);
 
                 // Swing 元件只能在介面執行緒更新。
                 SwingUtilities.invokeLater(() -> {
@@ -138,8 +148,9 @@ public class ChatWindow extends JFrame {
                     socket = newSocket;
                     output = writer;
                     connecting = false;
-                    setConnected(true);
-                    appendMessage("連線成功。");
+                    observing = observeOnly;
+                    setConnected(!observeOnly);
+                    appendMessage(observeOnly ? "已連線，可查看線上使用者。" : "連線成功。");
                 });
 
                 String message;
@@ -230,9 +241,10 @@ public class ChatWindow extends JFrame {
     private void setConnected(boolean connected) {
         hostField.setEnabled(!connected && !observing);
         portField.setEnabled(!connected && !observing);
-        nameField.setEnabled(!connected && !observing);
-        connectButton.setText(observing ? "重新加入" : "連線");
+        nameField.setEnabled(!connected && !connecting);
+        connectButton.setText(observing ? "加入聊天" : "連線");
         connectButton.setEnabled(!connected && !connecting);
+        viewUsersButton.setEnabled(!connected && !observing && !connecting);
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
         leaveButton.setEnabled(connected);

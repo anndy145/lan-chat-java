@@ -7,6 +7,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /** 處理單一 Client 的連線。 */
 class ClientSession implements Runnable {
@@ -31,9 +32,13 @@ class ClientSession implements Runnable {
             if (requestedName == null) {
                 return;
             }
-            name = cleanName(requestedName);
+            boolean initialObserver = "@observe".equals(requestedName);
+            active = !initialObserver;
+            name = initialObserver ? "Anonymous" : cleanName(requestedName);
             server.add(this);
-            server.broadcast(server.timestamped(name + " joined the chat."));
+            if (active) {
+                server.broadcast(server.timestamped(name + " joined the chat."));
+            }
 
             String line;
             while ((line = input.readLine()) != null) {
@@ -44,6 +49,14 @@ class ClientSession implements Runnable {
                     server.setActive(this, false);
                 } else if ("@join".equals(line)) {
                     server.setActive(this, true);
+                } else if (line.startsWith("@join:") && !isActive()) {
+                    try {
+                        String requested = new String(Base64.getDecoder().decode(line.substring(6)), StandardCharsets.UTF_8);
+                        name = cleanName(requested);
+                        server.setActive(this, true);
+                    } catch (IllegalArgumentException exception) {
+                        // 忽略格式錯誤的加入要求。
+                    }
                 } else if (isActive() && !line.isBlank()) {
                     server.broadcast(server.timestamped(name + ": " + line));
                 }

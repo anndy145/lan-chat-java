@@ -1,9 +1,0 @@
-# IntelliJ 的本機設定
-.idea/
-*.iml
-
-# Java 編譯產生的檔案
-*.class
-
-# IntelliJ 的編譯輸出資料夾
-out/

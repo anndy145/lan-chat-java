@@ -11,6 +11,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.Enumeration;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Base64;
+import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
 
 /** TCP LAN chat server. Run: java -cp out server.Server [port] */
 public class Server {
@@ -45,12 +48,28 @@ public class Server {
         }
     }
 
-    public void add(ClientSession session) {
+    public synchronized void add(ClientSession session) {
         clients.add(session);
+        broadcastUsers();
     }
 
-    public void remove(ClientSession session) {
-        clients.remove(session);
+    public synchronized void remove(ClientSession session) {
+        if (clients.remove(session)) {
+            broadcastUsers();
+        }
+    }
+
+    // 線上名單是獨立的協定訊息；Base64 避免暱稱中的分隔符干擾解析。
+    private void broadcastUsers() {
+        String names = clients.stream()
+                .map(ClientSession::getName)
+                .sorted()
+                .map(name -> Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)))
+                .collect(Collectors.joining(","));
+        String message = "@users:" + names;
+        for (ClientSession client : clients) {
+            client.send(message);
+        }
     }
 
     public void broadcast(String message) {

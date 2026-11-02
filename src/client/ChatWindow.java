@@ -12,9 +12,12 @@ import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -24,12 +27,13 @@ import javax.swing.SwingUtilities;
 
 public class ChatWindow extends JFrame {
     private final JTextField hostField = new JTextField("127.0.0.1");
-    private final JTextField portField = new JTextField("5000");
+    private final JTextField portField = new JTextField("5487");
     private final JTextField nameField = new JTextField();
     private final JButton connectButton = new JButton("連線");
     private final JTextArea chatArea = new JTextArea();
     private final JTextField inputField = new JTextField();
     private final JButton sendButton = new JButton("送出");
+    private final DefaultListModel<String> onlineUsers = new DefaultListModel<>();
 
     // 連線狀態和介面元件只在 Swing 介面執行緒中讀寫。
     private Socket socket;
@@ -61,6 +65,12 @@ public class ChatWindow extends JFrame {
         inputPanel.add(sendButton, BorderLayout.EAST);
         add(connectionPanel, BorderLayout.NORTH);
         add(new JScrollPane(chatArea), BorderLayout.CENTER);
+        JPanel usersPanel = new JPanel(new BorderLayout());
+        usersPanel.add(new JLabel("線上使用者"), BorderLayout.NORTH);
+        JScrollPane usersScroll = new JScrollPane(new JList<>(onlineUsers));
+        usersScroll.setPreferredSize(new java.awt.Dimension(140, 0));
+        usersPanel.add(usersScroll, BorderLayout.CENTER);
+        add(usersPanel, BorderLayout.EAST);
         add(inputPanel, BorderLayout.SOUTH);
         setConnected(false);
 
@@ -97,7 +107,7 @@ public class ChatWindow extends JFrame {
         Thread connectionThread = new Thread(() -> {
             Socket newSocket = new Socket();
             try {
-                newSocket.connect(new InetSocketAddress(host, port), 5000);
+                newSocket.connect(new InetSocketAddress(host, port), 5487);
                 BufferedReader input = new BufferedReader(
                         new InputStreamReader(newSocket.getInputStream(), StandardCharsets.UTF_8));
                 PrintWriter writer = new PrintWriter(
@@ -122,7 +132,11 @@ public class ChatWindow extends JFrame {
                     String received = message;
                     SwingUtilities.invokeLater(() -> {
                         if (socket == newSocket) {
-                            appendMessage(received);
+                            if (received.startsWith("@users:")) {
+                                updateOnlineUsers(received.substring(7));
+                            } else {
+                                appendMessage(received);
+                            }
                         }
                     });
                 }
@@ -156,6 +170,7 @@ public class ChatWindow extends JFrame {
             socket = null;
             output = null;
             connecting = false;
+            onlineUsers.clear();
             setConnected(false);
             if (isDisplayable()) {
                 appendMessage(message);
@@ -168,6 +183,7 @@ public class ChatWindow extends JFrame {
         socket = null;
         output = null;
         connecting = false;
+        onlineUsers.clear();
         setConnected(false);
         closeSocket(oldSocket);
     }
@@ -194,6 +210,22 @@ public class ChatWindow extends JFrame {
     private void appendMessage(String message) {
         chatArea.append(message + "\n");
         chatArea.setCaretPosition(chatArea.getDocument().getLength());
+    }
+
+    // 伺服器每次傳送完整名單，以最新名單取代舊內容。
+    private void updateOnlineUsers(String encodedNames) {
+        onlineUsers.clear();
+        if (!encodedNames.isEmpty()) {
+            for (String encoded : encodedNames.split(",")) {
+                try {
+                    onlineUsers.addElement(new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8));
+                } catch (IllegalArgumentException exception) {
+                    appendMessage("收到無法辨識的線上名單。");
+                    onlineUsers.clear();
+                    return;
+                }
+            }
+        }
     }
 
     public static void main(String[] args) {

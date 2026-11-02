@@ -7,6 +7,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -81,7 +82,19 @@ public class Client {
         try {
             String message;
             while ((message = serverInput.readLine()) != null) {
-                System.out.println(message);
+                if (message.startsWith("@users:")) {
+                    String encodedNames = message.substring(7);
+                    StringBuilder names = new StringBuilder();
+                    if (!encodedNames.isEmpty()) {
+                        for (String encoded : encodedNames.split(",")) {
+                            if (names.length() > 0) names.append(", ");
+                            names.append(new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8));
+                        }
+                    }
+                    System.out.println("線上使用者：" + names);
+                } else {
+                    System.out.println(message);
+                }
             }
         } catch (IOException exception) {
             // A socket close can interrupt readLine, including when the user leaves.

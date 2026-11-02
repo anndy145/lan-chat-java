@@ -26,7 +26,11 @@ class ClientSession implements Runnable {
              BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
              PrintWriter writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
             output = writer;
-            name = cleanName(input.readLine());
+            String requestedName = input.readLine();
+            if (requestedName == null) {
+                return;
+            }
+            name = cleanName(requestedName);
             server.add(this);
             server.broadcast(server.timestamped(name + " joined the chat."));
 
@@ -53,6 +57,10 @@ class ClientSession implements Runnable {
         if (output != null) {
             output.println(message);
         }
+    }
+
+    String getName() {
+        return name;
     }
 
     private static String cleanName(String requestedName) {

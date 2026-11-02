@@ -53,6 +53,14 @@ public class Server {
         broadcastUsers();
     }
 
+    public synchronized void setActive(ClientSession session, boolean active) {
+        if (clients.contains(session) && session.isActive() != active) {
+            session.setActive(active);
+            broadcastUsers();
+            broadcast(timestamped(session.getName() + (active ? " joined the chat." : " left the chat.")));
+        }
+    }
+
     public synchronized void remove(ClientSession session) {
         if (clients.remove(session)) {
             broadcastUsers();
@@ -62,6 +70,7 @@ public class Server {
     // 線上名單是獨立的協定訊息；Base64 避免暱稱中的分隔符干擾解析。
     private void broadcastUsers() {
         String names = clients.stream()
+                .filter(ClientSession::isActive)
                 .map(ClientSession::getName)
                 .sorted()
                 .map(name -> Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)))
@@ -72,9 +81,11 @@ public class Server {
         }
     }
 
-    public void broadcast(String message) {
+    public synchronized void broadcast(String message) {
         for (ClientSession client : clients) {
-            client.send(message);
+            if (client.isActive()) {
+                client.send(message);
+            }
         }
         System.out.println(message);
     }

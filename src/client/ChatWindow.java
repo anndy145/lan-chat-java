@@ -40,6 +40,7 @@ public class ChatWindow extends JFrame {
     private Socket socket;
     private PrintWriter output;
     private boolean connecting;
+    private boolean observing;
 
     public ChatWindow() {
         super("聊天室");
@@ -78,7 +79,16 @@ public class ChatWindow extends JFrame {
         add(inputPanel, BorderLayout.SOUTH);
         setConnected(false);
 
-        connectButton.addActionListener(event -> connect());
+        connectButton.addActionListener(event -> {
+            if (observing && output != null) {
+                output.println("@join");
+                observing = false;
+                setConnected(true);
+                appendMessage("已重新加入聊天室。");
+            } else {
+                connect();
+            }
+        });
         sendButton.addActionListener(event -> sendMessage());
         leaveButton.addActionListener(event -> leaveChat());
         inputField.addActionListener(event -> sendMessage());
@@ -139,7 +149,7 @@ public class ChatWindow extends JFrame {
                         if (socket == newSocket) {
                             if (received.startsWith("@users:")) {
                                 updateOnlineUsers(received.substring(7));
-                            } else {
+                            } else if (!observing) {
                                 appendMessage(received);
                             }
                         }
@@ -170,13 +180,14 @@ public class ChatWindow extends JFrame {
         }
     }
 
-    // 通知伺服器離開，並讓畫面回到可重新連線的狀態。
+    // 離開聊天但保留連線，以繼續接收線上名單。
     private void leaveChat() {
         if (output == null) {
             return;
         }
-        output.println("/quit");
-        closeConnection();
+        observing = true;
+        output.println("@leave");
+        setConnected(false);
         inputField.setText("");
         appendMessage("已離開聊天室。");
     }
@@ -186,6 +197,7 @@ public class ChatWindow extends JFrame {
             socket = null;
             output = null;
             connecting = false;
+            observing = false;
             onlineUsers.clear();
             setConnected(false);
             if (isDisplayable()) {
@@ -199,6 +211,7 @@ public class ChatWindow extends JFrame {
         socket = null;
         output = null;
         connecting = false;
+        observing = false;
         onlineUsers.clear();
         setConnected(false);
         closeSocket(oldSocket);
@@ -215,9 +228,10 @@ public class ChatWindow extends JFrame {
     }
 
     private void setConnected(boolean connected) {
-        hostField.setEnabled(!connected);
-        portField.setEnabled(!connected);
-        nameField.setEnabled(!connected);
+        hostField.setEnabled(!connected && !observing);
+        portField.setEnabled(!connected && !observing);
+        nameField.setEnabled(!connected && !observing);
+        connectButton.setText(observing ? "重新加入" : "連線");
         connectButton.setEnabled(!connected && !connecting);
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);

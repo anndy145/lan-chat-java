@@ -14,6 +14,7 @@ class ClientSession implements Runnable {
     private final Server server;
     private PrintWriter output;
     private String name;
+    private volatile boolean active = true;
 
     ClientSession(Socket socket, Server server) {
         this.socket = socket;
@@ -39,7 +40,11 @@ class ClientSession implements Runnable {
                 if ("/quit".equalsIgnoreCase(line.trim())) {
                     break;
                 }
-                if (!line.isBlank()) {
+                if ("@leave".equals(line)) {
+                    server.setActive(this, false);
+                } else if ("@join".equals(line)) {
+                    server.setActive(this, true);
+                } else if (isActive() && !line.isBlank()) {
                     server.broadcast(server.timestamped(name + ": " + line));
                 }
             }
@@ -47,8 +52,11 @@ class ClientSession implements Runnable {
             System.out.println("Connection lost: " + socket.getRemoteSocketAddress());
         } finally {
             if (name != null) {
+                boolean wasActive = isActive();
                 server.remove(this);
-                server.broadcast(server.timestamped(name + " left the chat."));
+                if (wasActive) {
+                    server.broadcast(server.timestamped(name + " left the chat."));
+                }
             }
         }
     }
@@ -61,6 +69,14 @@ class ClientSession implements Runnable {
 
     String getName() {
         return name;
+    }
+
+    boolean isActive() {
+        return active;
+    }
+
+    void setActive(boolean active) {
+        this.active = active;
     }
 
     private static String cleanName(String requestedName) {

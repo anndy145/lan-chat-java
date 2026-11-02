@@ -42,6 +42,7 @@ public class ChatWindow extends JFrame {
     private PrintWriter output;
     private boolean connecting;
     private boolean observing;
+    private long connectionGeneration;
 
     public ChatWindow() {
         super("聊天室");
@@ -98,7 +99,14 @@ public class ChatWindow extends JFrame {
                 connect(false);
             }
         });
-        viewUsersButton.addActionListener(event -> connect(true));
+        viewUsersButton.addActionListener(event -> {
+            if (observing) {
+                closeConnection();
+                appendMessage("已中斷伺服器連線，可修改 IP 和連接埠。");
+            } else {
+                connect(true);
+            }
+        });
         sendButton.addActionListener(event -> sendMessage());
         leaveButton.addActionListener(event -> leaveChat());
         inputField.addActionListener(event -> sendMessage());
@@ -125,6 +133,7 @@ public class ChatWindow extends JFrame {
         }
 
         connecting = true;
+        long generation = ++connectionGeneration;
         setConnected(false);
         appendMessage("正在連線……");
 
@@ -141,7 +150,7 @@ public class ChatWindow extends JFrame {
 
                 // Swing 元件只能在介面執行緒更新。
                 SwingUtilities.invokeLater(() -> {
-                    if (!isDisplayable()) {
+                    if (!isDisplayable() || generation != connectionGeneration) {
                         closeSocket(newSocket);
                         return;
                     }
@@ -166,9 +175,13 @@ public class ChatWindow extends JFrame {
                         }
                     });
                 }
-                SwingUtilities.invokeLater(() -> disconnected(newSocket, "伺服器已中斷連線。"));
+                SwingUtilities.invokeLater(() -> {
+                    if (generation == connectionGeneration) disconnected(newSocket, "伺服器已中斷連線。");
+                });
             } catch (IOException exception) {
-                SwingUtilities.invokeLater(() -> disconnected(newSocket, "連線結束或失敗：" + exception.getMessage()));
+                SwingUtilities.invokeLater(() -> {
+                    if (generation == connectionGeneration) disconnected(newSocket, "連線結束或失敗：" + exception.getMessage());
+                });
             } finally {
                 closeSocket(newSocket);
             }
@@ -218,6 +231,7 @@ public class ChatWindow extends JFrame {
     }
 
     private void closeConnection() {
+        connectionGeneration++;
         Socket oldSocket = socket;
         socket = null;
         output = null;
@@ -239,12 +253,13 @@ public class ChatWindow extends JFrame {
     }
 
     private void setConnected(boolean connected) {
-        hostField.setEnabled(!connected && !observing);
-        portField.setEnabled(!connected && !observing);
+        hostField.setEnabled(!connected && !observing && !connecting);
+        portField.setEnabled(!connected && !observing && !connecting);
         nameField.setEnabled(!connected && !connecting);
         connectButton.setText(observing ? "加入聊天" : "連線");
         connectButton.setEnabled(!connected && !connecting);
-        viewUsersButton.setEnabled(!connected && !observing && !connecting);
+        viewUsersButton.setText(observing ? "中斷伺服器連線" : "查看線上使用者");
+        viewUsersButton.setEnabled(!connected && !connecting);
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
         leaveButton.setEnabled(connected);

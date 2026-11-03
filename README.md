@@ -2,6 +2,8 @@
 
 使用 Java TCP Socket 實作的內網文字聊天室，支援公開聊天、私人訊息、自訂群組與線上使用者名單，提供 Swing 圖形介面和命令列操作。
 
+程式架構與通訊格式請參考[技術文件](docs/technical.md)。
+
 ## 編譯
 
 安裝 JDK 後，在專案根目錄執行：
@@ -31,7 +33,7 @@ java -cp out client.ChatWindow
 也可以使用命令列 Client：
 
 ```cmd
-java -cp out client.Client 127.0.0.1 5487 Andy
+java -cp out client.Client <ip address> <port> <username>
 ```
 
 命令列使用者受邀後可用 `/group <group-id> <message>` 回覆；輸入 `/quit` 可離開聊天室。Server 與 Client 請使用相同版本。

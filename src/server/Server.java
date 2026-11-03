@@ -53,6 +53,44 @@ public class Server {
         broadcastUsers();
     }
 
+    public synchronized boolean join(ClientSession session, String name) {
+        boolean taken = clients.stream().anyMatch(client -> client != session
+                && client.isActive() && client.getName().equalsIgnoreCase(name));
+        if (taken) {
+            session.send("@error:name");
+            return false;
+        }
+        session.setName(name);
+        clients.add(session);
+        session.setActive(true);
+        session.send("@joined");
+        broadcastUsers();
+        broadcast(timestamped(name + " joined the chat."));
+        return true;
+    }
+
+    public synchronized void sendPrivate(ClientSession sender, String recipientName, String text) {
+        if (!sender.isActive()) return;
+        for (ClientSession recipient : clients) {
+            if (recipient.isActive() && recipient.getName().equalsIgnoreCase(recipientName)) {
+                if (recipient == sender) {
+                    sendPrivateLine(sender, recipientName, "You cannot message yourself.");
+                    return;
+                }
+                sendPrivateLine(recipient, sender.getName(), timestamped(sender.getName() + ": " + text));
+                sendPrivateLine(sender, recipient.getName(), timestamped("You: " + text));
+                return;
+            }
+        }
+        sendPrivateLine(sender, recipientName, "User is no longer online: " + recipientName);
+    }
+
+    private void sendPrivateLine(ClientSession recipient, String peer, String text) {
+        String encodedPeer = Base64.getEncoder().encodeToString(peer.getBytes(StandardCharsets.UTF_8));
+        String encodedText = Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
+        recipient.send("@pm:" + encodedPeer + ":" + encodedText);
+    }
+
     public synchronized void setActive(ClientSession session, boolean active) {
         if (clients.contains(session) && session.isActive() != active) {
             session.setActive(active);

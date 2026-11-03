@@ -33,11 +33,12 @@ class ClientSession implements Runnable {
                 return;
             }
             boolean initialObserver = "@observe".equals(requestedName);
-            active = !initialObserver;
+            active = false;
             name = initialObserver ? "Anonymous" : cleanName(requestedName);
-            server.add(this);
-            if (active) {
-                server.broadcast(server.timestamped(name + " joined the chat."));
+            if (initialObserver) {
+                server.add(this);
+            } else if (!server.join(this, name)) {
+                return;
             }
 
             String line;
@@ -48,14 +49,26 @@ class ClientSession implements Runnable {
                 if ("@leave".equals(line)) {
                     server.setActive(this, false);
                 } else if ("@join".equals(line)) {
-                    server.setActive(this, true);
+                    server.join(this, name);
                 } else if (line.startsWith("@join:") && !isActive()) {
                     try {
                         String requested = new String(Base64.getDecoder().decode(line.substring(6)), StandardCharsets.UTF_8);
-                        name = cleanName(requested);
-                        server.setActive(this, true);
+                        server.join(this, cleanName(requested));
                     } catch (IllegalArgumentException exception) {
                         // 忽略格式錯誤的加入要求。
+                    }
+                } else if (line.startsWith("@private:") && isActive()) {
+                    String[] parts = line.substring(9).split(":", 2);
+                    if (parts.length == 2) {
+                        try {
+                            String target = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+                            String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
+                                server.sendPrivate(this, target, text);
+                            }
+                        } catch (IllegalArgumentException exception) {
+                            send("[Private] Invalid message.");
+                        }
                     }
                 } else if (isActive() && !line.isBlank()) {
                     server.broadcast(server.timestamped(name + ": " + line));
@@ -82,6 +95,10 @@ class ClientSession implements Runnable {
 
     String getName() {
         return name;
+    }
+
+    void setName(String name) {
+        this.name = name;
     }
 
     boolean isActive() {

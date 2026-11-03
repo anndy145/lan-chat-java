@@ -82,7 +82,22 @@ public class Client {
         try {
             String message;
             while ((message = serverInput.readLine()) != null) {
-                if (message.startsWith("@users:")) {
+                if (message.equals("@joined")) {
+                    continue;
+                } else if (message.equals("@error:name")) {
+                    System.out.println("Name is already in use.");
+                } else if (message.startsWith("@pm:")) {
+                    String[] parts = message.substring(4).split(":", 2);
+                    if (parts.length == 2) {
+                        try {
+                            String peer = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+                            String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            System.out.println("[Private with " + peer + "] " + text);
+                        } catch (IllegalArgumentException exception) {
+                            System.out.println("Invalid private message received.");
+                        }
+                    }
+                } else if (message.startsWith("@users:")) {
                     String encodedNames = message.substring(7);
                     StringBuilder names = new StringBuilder();
                     if (!encodedNames.isEmpty()) {

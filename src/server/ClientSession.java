@@ -59,6 +59,15 @@ class ClientSession implements Runnable {
                     } catch (IllegalArgumentException exception) {
                         // 忽略格式錯誤的加入要求。
                     }
+                } else if (line.startsWith("@say:") && isActive()) {
+                    try {
+                        String text = new String(Base64.getDecoder().decode(line.substring(5)), StandardCharsets.UTF_8);
+                        if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
+                            server.sendPublic(this, text);
+                        }
+                    } catch (IllegalArgumentException exception) {
+                        send("@notice:SW52YWxpZCBtZXNzYWdlLg==");
+                    }
                 } else if (line.startsWith("@private:") && isActive()) {
                     String[] parts = line.substring(9).split(":", 2);
                     if (parts.length == 2) {

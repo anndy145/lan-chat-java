@@ -264,7 +264,7 @@ public class ChatWindow extends JFrame {
         if ("/quit".equalsIgnoreCase(message.strip())) {
             leaveChat();
         } else if (chats.getSelectedIndex() == 0) {
-            output.println(message);
+            output.println("@say:" + encode(message));
         } else if (groupChats.containsValue(chats.getSelectedComponent())) {
             String groupId = groupChats.entrySet().stream()
                     .filter(entry -> entry.getValue() == chats.getSelectedComponent())

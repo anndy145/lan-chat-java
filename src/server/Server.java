@@ -48,10 +48,9 @@ public class Server {
     }
 
     public void start() {
-        System.out.println("Chat server started on port " + port + ".");
-        printLanAddresses();
-
         try (ServerSocket serverSocket = new ServerSocket(port)) {
+            System.out.println("Chat server started on port " + port + ".");
+            printLanAddresses();
             while (true) {
                 Socket socket = serverSocket.accept();
                 ClientSession session = new ClientSession(socket, this);

@@ -73,7 +73,8 @@ public class Client {
                     String encoded = Base64.getEncoder().encodeToString(parts[2].getBytes(StandardCharsets.UTF_8));
                     serverOutput.println("@group-send:" + parts[1] + ":" + encoded);
                 } else {
-                    serverOutput.println(line);
+                    String encoded = Base64.getEncoder().encodeToString(line.getBytes(StandardCharsets.UTF_8));
+                    serverOutput.println("@say:" + encoded);
                 }
             }
         } catch (IOException exception) {

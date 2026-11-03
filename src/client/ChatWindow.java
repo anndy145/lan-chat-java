@@ -29,12 +29,12 @@ public class ChatWindow extends JFrame {
     private final JTextField hostField = new JTextField("127.0.0.1");
     private final JTextField portField = new JTextField("5487");
     private final JTextField nameField = new JTextField();
-    private final JButton connectButton = new JButton("連線");
-    private final JButton viewUsersButton = new JButton("查看線上使用者");
+    private final JButton connectButton = new JButton("Connect");
+    private final JButton viewUsersButton = new JButton("View online users");
     private final JTextArea chatArea = new JTextArea();
     private final JTextField inputField = new JTextField();
-    private final JButton sendButton = new JButton("送出");
-    private final JButton leaveButton = new JButton("離開");
+    private final JButton sendButton = new JButton("Send");
+    private final JButton leaveButton = new JButton("Leave");
     private final DefaultListModel<String> onlineUsers = new DefaultListModel<>();
 
     // 連線狀態和介面元件只在 Swing 介面執行緒中讀寫。
@@ -45,16 +45,16 @@ public class ChatWindow extends JFrame {
     private long connectionGeneration;
 
     public ChatWindow() {
-        super("聊天室");
+        super("Chat Room");
         setSize(600, 450);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         // 上方放連線資料；中間顯示訊息，下方讓使用者輸入。
         JPanel connectionPanel = new JPanel(new GridLayout(2, 4, 5, 5));
-        connectionPanel.add(new JLabel("伺服器 IP"));
-        connectionPanel.add(new JLabel("連接埠"));
-        connectionPanel.add(new JLabel("暱稱"));
+        connectionPanel.add(new JLabel("Server IP"));
+        connectionPanel.add(new JLabel("Port"));
+        connectionPanel.add(new JLabel("Name"));
         connectionPanel.add(new JLabel(""));
         connectionPanel.add(hostField);
         connectionPanel.add(portField);
@@ -74,7 +74,7 @@ public class ChatWindow extends JFrame {
         add(new JScrollPane(chatArea), BorderLayout.CENTER);
         JPanel usersPanel = new JPanel(new BorderLayout());
         JPanel usersHeader = new JPanel(new BorderLayout());
-        usersHeader.add(new JLabel("線上使用者"), BorderLayout.NORTH);
+        usersHeader.add(new JLabel("Online users"), BorderLayout.NORTH);
         usersHeader.add(viewUsersButton, BorderLayout.SOUTH);
         usersPanel.add(usersHeader, BorderLayout.NORTH);
         JScrollPane usersScroll = new JScrollPane(new JList<>(onlineUsers));
@@ -88,13 +88,13 @@ public class ChatWindow extends JFrame {
             if (observing && output != null) {
                 String name = nameField.getText().strip();
                 if (name.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "請輸入暱稱。");
+                    JOptionPane.showMessageDialog(this, "Please enter a name.");
                     return;
                 }
                 output.println("@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
                 observing = false;
                 setConnected(true);
-                appendMessage("已重新加入聊天室。");
+                appendMessage("You joined the chat.");
             } else {
                 connect(false);
             }
@@ -102,7 +102,7 @@ public class ChatWindow extends JFrame {
         viewUsersButton.addActionListener(event -> {
             if (observing) {
                 closeConnection();
-                appendMessage("已中斷伺服器連線，可修改 IP 和連接埠。");
+                appendMessage("Disconnected. You can change the server IP and port.");
             } else {
                 connect(true);
             }
@@ -128,14 +128,16 @@ public class ChatWindow extends JFrame {
                 throw new IllegalArgumentException();
             }
         } catch (IllegalArgumentException exception) {
-            JOptionPane.showMessageDialog(this, "請輸入伺服器 IP、暱稱及 1 到 65535 的連接埠。");
+            JOptionPane.showMessageDialog(this, observeOnly
+                    ? "Enter a server IP and a port from 1 to 65535."
+                    : "Enter a server IP, a name, and a port from 1 to 65535.");
             return;
         }
 
         connecting = true;
         long generation = ++connectionGeneration;
         setConnected(false);
-        appendMessage("正在連線……");
+        appendMessage("Connecting...");
 
         // 網路連線可能需要等待，放在背景執行緒以免視窗卡住。
         Thread connectionThread = new Thread(() -> {
@@ -159,7 +161,7 @@ public class ChatWindow extends JFrame {
                     connecting = false;
                     observing = observeOnly;
                     setConnected(!observeOnly);
-                    appendMessage(observeOnly ? "已連線，可查看線上使用者。" : "連線成功。");
+                    appendMessage(observeOnly ? "Connected. You can view online users." : "Connected.");
                 });
 
                 String message;
@@ -176,11 +178,11 @@ public class ChatWindow extends JFrame {
                     });
                 }
                 SwingUtilities.invokeLater(() -> {
-                    if (generation == connectionGeneration) disconnected(newSocket, "伺服器已中斷連線。");
+                    if (generation == connectionGeneration) disconnected(newSocket, "Disconnected from the server.");
                 });
             } catch (IOException exception) {
                 SwingUtilities.invokeLater(() -> {
-                    if (generation == connectionGeneration) disconnected(newSocket, "連線結束或失敗：" + exception.getMessage());
+                    if (generation == connectionGeneration) disconnected(newSocket, "Connection closed or failed: " + exception.getMessage());
                 });
             } finally {
                 closeSocket(newSocket);
@@ -213,7 +215,7 @@ public class ChatWindow extends JFrame {
         output.println("@leave");
         setConnected(false);
         inputField.setText("");
-        appendMessage("已離開聊天室。");
+        appendMessage("You left the chat.");
     }
 
     private void disconnected(Socket closedSocket, String message) {
@@ -256,9 +258,9 @@ public class ChatWindow extends JFrame {
         hostField.setEnabled(!connected && !observing && !connecting);
         portField.setEnabled(!connected && !observing && !connecting);
         nameField.setEnabled(!connected && !connecting);
-        connectButton.setText(observing ? "加入聊天" : "連線");
+        connectButton.setText(observing ? "Join chat" : "Connect");
         connectButton.setEnabled(!connected && !connecting);
-        viewUsersButton.setText(observing ? "中斷伺服器連線" : "查看線上使用者");
+        viewUsersButton.setText(observing ? "Disconnect" : "View online users");
         viewUsersButton.setEnabled(!connected && !connecting);
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
@@ -278,7 +280,7 @@ public class ChatWindow extends JFrame {
                 try {
                     onlineUsers.addElement(new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8));
                 } catch (IllegalArgumentException exception) {
-                    appendMessage("收到無法辨識的線上名單。");
+                    appendMessage("Received an invalid online user list.");
                     onlineUsers.clear();
                     return;
                 }

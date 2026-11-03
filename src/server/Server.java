@@ -70,7 +70,7 @@ public class Server {
     public synchronized boolean join(ClientSession session, String name) {
         if (clients.contains(session) && session.isActive()) return false;
         boolean taken = clients.stream().anyMatch(client -> client != session
-                && client.isActive() && client.getName().equalsIgnoreCase(name));
+                && client.isActive() && client.getName().equals(name));
         if (taken) {
             session.send("@error:name");
             return false;
@@ -88,7 +88,7 @@ public class Server {
     public synchronized void sendPrivate(ClientSession sender, String recipientName, String text) {
         if (!sender.isActive()) return;
         for (ClientSession recipient : clients) {
-            if (recipient.isActive() && recipient.getName().equalsIgnoreCase(recipientName)) {
+            if (recipient.isActive() && recipient.getName().equals(recipientName)) {
                 if (recipient == sender) {
                     sendPrivateLine(sender, recipientName, "You cannot message yourself.");
                     return;
@@ -120,7 +120,7 @@ public class Server {
         members.add(creator);
         for (String requested : requestedMembers) {
             ClientSession match = clients.stream().filter(ClientSession::isActive)
-                    .filter(client -> client.getName().equalsIgnoreCase(requested)).findFirst().orElse(null);
+                    .filter(client -> client.getName().equals(requested)).findFirst().orElse(null);
             if (match == null || match == creator) {
                 creator.send("@notice:" + encode("A selected user is unavailable: " + requested));
                 return;

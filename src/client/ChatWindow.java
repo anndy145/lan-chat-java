@@ -78,7 +78,7 @@ public class ChatWindow extends JFrame {
         chatArea.setEditable(false);
         chatArea.setLineWrap(true);
         chatArea.setWrapStyleWord(true);
-        chats.addTab("Group", new JScrollPane(chatArea));
+        chats.addTab("Lobby", new JScrollPane(chatArea));
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
         inputPanel.add(inputField, BorderLayout.CENTER);
         JPanel buttonsPanel = new JPanel();
@@ -121,7 +121,7 @@ public class ChatWindow extends JFrame {
         viewUsersButton.addActionListener(event -> {
             if (observing) {
                 closeConnection();
-                appendMessage("Disconnected. You can change the server IP and port.");
+                appendMessage("Disconnected.");
             } else {
                 connect(true);
             }
@@ -184,7 +184,8 @@ public class ChatWindow extends JFrame {
                         new OutputStreamWriter(newSocket.getOutputStream(), StandardCharsets.UTF_8), true);
                 writer.println("@observe");
                 if (!observeOnly) {
-                    writer.println("@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
+                    writer.println(
+                            "@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
                 }
 
                 // Swing 元件只能在介面執行緒更新。
@@ -229,7 +230,8 @@ public class ChatWindow extends JFrame {
                                 receiveGroup(received);
                             } else if (received.startsWith("@notice:")) {
                                 try {
-                                    appendMessage(new String(Base64.getDecoder().decode(received.substring(8)), StandardCharsets.UTF_8));
+                                    appendMessage(new String(Base64.getDecoder().decode(received.substring(8)),
+                                            StandardCharsets.UTF_8));
                                 } catch (IllegalArgumentException exception) {
                                     appendMessage("Received an invalid notification.");
                                 }
@@ -240,11 +242,13 @@ public class ChatWindow extends JFrame {
                     });
                 }
                 SwingUtilities.invokeLater(() -> {
-                    if (generation == connectionGeneration) disconnected(newSocket, "Disconnected from the server.");
+                    if (generation == connectionGeneration)
+                        disconnected(newSocket, "Disconnected from the server.");
                 });
             } catch (IOException exception) {
                 SwingUtilities.invokeLater(() -> {
-                    if (generation == connectionGeneration) disconnected(newSocket, "Connection closed or failed: " + exception.getMessage());
+                    if (generation == connectionGeneration)
+                        disconnected(newSocket, "Connection closed or failed: " + exception.getMessage());
                 });
             } finally {
                 closeSocket(newSocket);
@@ -285,7 +289,7 @@ public class ChatWindow extends JFrame {
             return;
         }
         String target = selected.get(0);
-        if (target.equalsIgnoreCase(activeName)) {
+        if (target.equals(activeName)) {
             JOptionPane.showMessageDialog(this, "Select another user.");
             return;
         }
@@ -295,13 +299,14 @@ public class ChatWindow extends JFrame {
 
     private void createGroup() {
         List<String> members = usersList.getSelectedValuesList().stream()
-                .filter(name -> !name.equalsIgnoreCase(activeName)).collect(Collectors.toList());
+                .filter(name -> !name.equals(activeName)).collect(Collectors.toList());
         if (members.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Select at least one other online user. Hold Ctrl to select more.");
             return;
         }
         String name = JOptionPane.showInputDialog(this, "Group name:");
-        if (name == null) return;
+        if (name == null)
+            return;
         name = name.strip();
         if (name.isEmpty() || name.length() > 80 || name.contains("\n") || name.contains("\r")) {
             JOptionPane.showMessageDialog(this, "Enter a group name of up to 80 characters.");
@@ -317,7 +322,8 @@ public class ChatWindow extends JFrame {
 
     private void receiveGroup(String message) {
         String[] parts = message.substring(7).split(":", 3);
-        if (parts.length != 3) return;
+        if (parts.length != 3)
+            return;
         try {
             String name = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
@@ -353,7 +359,8 @@ public class ChatWindow extends JFrame {
 
     private void receivePrivate(String message) {
         String[] parts = message.substring(4).split(":", 2);
-        if (parts.length != 2) return;
+        if (parts.length != 2)
+            return;
         try {
             String peer = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8);
             String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
@@ -407,13 +414,15 @@ public class ChatWindow extends JFrame {
     }
 
     private void clearPrivateChats() {
-        while (chats.getTabCount() > 1) chats.removeTabAt(1);
+        while (chats.getTabCount() > 1)
+            chats.removeTabAt(1);
         privateChats.clear();
         groupChats.clear();
     }
 
     private void clearGroupChats() {
-        for (JScrollPane pane : groupChats.values()) chats.remove(pane);
+        for (JScrollPane pane : groupChats.values())
+            chats.remove(pane);
         groupChats.clear();
     }
 

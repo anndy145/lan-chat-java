@@ -12,6 +12,10 @@
 javac -encoding UTF-8 -d out src\server\*.java src\client\*.java
 ```
 
+## 下載 Windows 免安裝版
+
+在 GitHub 的 Actions 頁面開啟成功的 `Build Windows portable client` 執行紀錄，從 Artifacts 下載 `LanChatClient-Windows-x64`。解壓縮後執行 `LanChatClient.exe`，並保留旁邊的 `app` 和 `runtime` 資料夾。Client 不需要另外安裝 Java；聊天時仍需連接已啟動的 Server。此流程會在推送至 `main` 時執行，也可以手動執行。
+
 ## 使用方式
 
 伺服器端（可以自訂port, 預設為 port 5487）：

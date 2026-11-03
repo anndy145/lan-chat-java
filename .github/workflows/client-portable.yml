@@ -1,0 +1,61 @@
+name: Build Windows portable client
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compile client
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out/classes, out/input, out/portable | Out-Null
+          javac -encoding UTF-8 -d out/classes src/client/*.java
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Create client JAR
+        shell: pwsh
+        run: jar --create --file out/input/client.jar --main-class client.ChatWindow -C out/classes client
+
+      - name: Create portable application
+        shell: pwsh
+        run: >-
+          jpackage --type app-image --name LanChatClient
+          --input out/input --main-jar client.jar --main-class client.ChatWindow
+          --dest out/portable --add-modules java.desktop
+
+      - name: Verify package files
+        shell: pwsh
+        run: |
+          $requiredFiles = @(
+            'out/portable/LanChatClient/LanChatClient.exe',
+            'out/portable/LanChatClient/app/client.jar',
+            'out/portable/LanChatClient/runtime/bin/server/jvm.dll'
+          )
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Missing package file: $file"
+            }
+          }
+
+      - name: Upload portable client
+        uses: actions/upload-artifact@v4
+        with:
+          name: LanChatClient-Windows-x64
+          path: out/portable/LanChatClient/
+          if-no-files-found: error

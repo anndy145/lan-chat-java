@@ -2,6 +2,7 @@ package client;
 
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
+import java.awt.Image;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
@@ -17,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -79,6 +81,8 @@ public class ChatWindow extends JFrame {
         chatArea.setLineWrap(true);
         chatArea.setWrapStyleWord(true);
         chats.addTab("Lobby", new JScrollPane(chatArea));
+        setButtonIcon(sendButton, "/buttons/send.png", "Send");
+        setButtonIcon(leaveButton, "/buttons/leave.png", "Leave");
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
         inputPanel.add(inputField, BorderLayout.CENTER);
         JPanel buttonsPanel = new JPanel();
@@ -137,6 +141,18 @@ public class ChatWindow extends JFrame {
                 closeConnection();
             }
         });
+    }
+
+    // 載入按鈕圖示；若找不到圖片，保留按鈕原本的文字。
+    private void setButtonIcon(JButton button, String path, String description) {
+        java.net.URL resource = ChatWindow.class.getResource(path);
+        if (resource != null) {
+            Image image = new ImageIcon(resource).getImage().getScaledInstance(24, 24, Image.SCALE_SMOOTH);
+            button.setIcon(new ImageIcon(image));
+            button.setText("");
+        }
+        button.setToolTipText(description);
+        button.getAccessibleContext().setAccessibleName(description);
     }
 
     private void connect(boolean observeOnly) {

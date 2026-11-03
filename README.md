@@ -27,7 +27,7 @@ java -cp out server.Server <port>
 客戶端：
 
 ```cmd
-java -cp out client.ChatWindow
+java -cp "out;resources" client.ChatWindow
 ```
 
 輸入 Server 的 IP、連接埠和暱稱，按「連線」即可聊天。同一台電腦測試時，IP 使用 `127.0.0.1`；其他電腦則使用 Server 的內網 IPv4 位址。

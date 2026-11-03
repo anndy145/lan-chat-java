@@ -10,9 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * TCP LAN chat client. Run: java -cp out client.Client <server-ip> <port> <name>
- */
 public class Client {
     public static void main(String[] args) {
         if (args.length != 3) {
@@ -99,7 +96,8 @@ public class Client {
                     System.out.println("Name is already in use.");
                 } else if (message.startsWith("@notice:")) {
                     try {
-                        System.out.println(new String(Base64.getDecoder().decode(message.substring(8)), StandardCharsets.UTF_8));
+                        System.out.println(
+                                new String(Base64.getDecoder().decode(message.substring(8)), StandardCharsets.UTF_8));
                     } catch (IllegalArgumentException exception) {
                         System.out.println("Invalid notification received.");
                     }
@@ -130,7 +128,8 @@ public class Client {
                     StringBuilder names = new StringBuilder();
                     if (!encodedNames.isEmpty()) {
                         for (String encoded : encodedNames.split(",")) {
-                            if (names.length() > 0) names.append(", ");
+                            if (names.length() > 0)
+                                names.append(", ");
                             names.append(new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8));
                         }
                     }
@@ -147,4 +146,3 @@ public class Client {
         }
     }
 }
-

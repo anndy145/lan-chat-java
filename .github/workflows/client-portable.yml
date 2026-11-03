@@ -30,7 +30,7 @@ jobs:
 
       - name: Create client JAR
         shell: pwsh
-        run: jar --create --file out/input/client.jar --main-class client.ChatWindow -C out/classes client
+        run: jar --create --file out/input/client.jar --main-class client.ChatWindow -C out/classes client -C resources buttons
 
       - name: Create portable application
         shell: pwsh

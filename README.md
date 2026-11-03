@@ -1,6 +1,6 @@
 # Java 內網聊天室
 
-使用 Java TCP Socket 實作的內網文字聊天室，支援多人聊天、線上使用者名單，以及 Swing 圖形介面和命令列操作。
+使用 Java TCP Socket 實作的內網文字聊天室，支援公開聊天、私人訊息、自訂群組與線上使用者名單，提供 Swing 圖形介面和命令列操作。
 
 ## 編譯
 
@@ -26,10 +26,14 @@ java -cp out client.ChatWindow
 
 輸入 Server 的 IP、連接埠和暱稱，按「連線」即可聊天。同一台電腦測試時，IP 使用 `127.0.0.1`；其他電腦則使用 Server 的內網 IPv4 位址。
 
+在線上名單選擇使用者並按 `Create group`，輸入群組名稱即可建立群組；按住 Ctrl 可選取多人。群組成員會收到各自的聊天分頁。使用者離開聊天室或斷線時會離開群組，群組不會永久保存。
+
 也可以使用命令列 Client：
 
 ```cmd
 java -cp out client.Client 127.0.0.1 5487 Andy
 ```
 
-輸入 `/quit` 可離開聊天室。Server 與 Client 請使用相同版本。
+命令列使用者受邀後可用 `/group <group-id> <message>` 回覆；輸入 `/quit` 可離開聊天室。Server 與 Client 請使用相同版本。
+
+Server 主控台僅顯示訊息的傳送時間、發送者與收件者，不保存聊天內容；通訊目前未加密。

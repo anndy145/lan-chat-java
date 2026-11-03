@@ -70,8 +70,34 @@ class ClientSession implements Runnable {
                             send("[Private] Invalid message.");
                         }
                     }
+                } else if (line.startsWith("@group-create:") && isActive()) {
+                    String[] parts = line.substring(14).split(":", 2);
+                    try {
+                        if (parts.length == 2 && !parts[1].isEmpty()) {
+                            String groupName = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8).strip();
+                            String[] members = parts[1].split(",");
+                            for (int i = 0; i < members.length; i++) {
+                                members[i] = new String(Base64.getDecoder().decode(members[i]), StandardCharsets.UTF_8);
+                            }
+                            server.createGroup(this, groupName, members);
+                        }
+                    } catch (IllegalArgumentException exception) {
+                        send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
+                    }
+                } else if (line.startsWith("@group-send:") && isActive()) {
+                    String[] parts = line.substring(12).split(":", 2);
+                    try {
+                        if (parts.length == 2) {
+                            String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
+                                server.sendGroup(this, parts[0], text);
+                            }
+                        }
+                    } catch (IllegalArgumentException exception) {
+                        send("@notice:SW52YWxpZCBncm91cCBtZXNzYWdlLg==");
+                    }
                 } else if (isActive() && !line.isBlank()) {
-                    server.broadcast(server.timestamped(name + ": " + line));
+                    server.sendPublic(this, line);
                 }
             }
         } catch (IOException exception) {

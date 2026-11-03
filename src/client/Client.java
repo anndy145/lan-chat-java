@@ -64,7 +64,17 @@ public class Client {
                     serverOutput.println(line);
                     break;
                 }
-                serverOutput.println(line);
+                if (line.startsWith("/group ")) {
+                    String[] parts = line.split(" ", 3);
+                    if (parts.length < 3 || parts[2].isBlank()) {
+                        System.out.println("Usage: /group <group-id> <message>");
+                        continue;
+                    }
+                    String encoded = Base64.getEncoder().encodeToString(parts[2].getBytes(StandardCharsets.UTF_8));
+                    serverOutput.println("@group-send:" + parts[1] + ":" + encoded);
+                } else {
+                    serverOutput.println(line);
+                }
             }
         } catch (IOException exception) {
             System.err.println("Could not read keyboard input: " + exception.getMessage());
@@ -86,6 +96,23 @@ public class Client {
                     continue;
                 } else if (message.equals("@error:name")) {
                     System.out.println("Name is already in use.");
+                } else if (message.startsWith("@notice:")) {
+                    try {
+                        System.out.println(new String(Base64.getDecoder().decode(message.substring(8)), StandardCharsets.UTF_8));
+                    } catch (IllegalArgumentException exception) {
+                        System.out.println("Invalid notification received.");
+                    }
+                } else if (message.startsWith("@group:")) {
+                    String[] parts = message.substring(7).split(":", 3);
+                    if (parts.length == 3) {
+                        try {
+                            String name = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
+                            System.out.println("[Group " + name + " / " + parts[0] + "] " + text);
+                        } catch (IllegalArgumentException exception) {
+                            System.out.println("Invalid group message received.");
+                        }
+                    }
                 } else if (message.startsWith("@pm:")) {
                     String[] parts = message.substring(4).split(":", 2);
                     if (parts.length == 2) {

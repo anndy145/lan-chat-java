@@ -27,6 +27,9 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
+import javax.swing.ListSelectionModel;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class ChatWindow extends JFrame {
     private final JTextField hostField = new JTextField("127.0.0.1");
@@ -39,10 +42,12 @@ public class ChatWindow extends JFrame {
     private final JButton sendButton = new JButton("Send");
     private final JButton leaveButton = new JButton("Leave");
     private final JButton privateButton = new JButton("Open private chat");
+    private final JButton createGroupButton = new JButton("Create group");
     private final DefaultListModel<String> onlineUsers = new DefaultListModel<>();
     private final JList<String> usersList = new JList<>(onlineUsers);
     private final JTabbedPane chats = new JTabbedPane();
     private final Map<String, JTextArea> privateChats = new LinkedHashMap<>();
+    private final Map<String, JScrollPane> groupChats = new LinkedHashMap<>();
     private String activeName;
 
     // 連線狀態和介面元件只在 Swing 介面執行緒中讀寫。
@@ -88,9 +93,13 @@ public class ChatWindow extends JFrame {
         usersHeader.add(viewUsersButton, BorderLayout.SOUTH);
         usersPanel.add(usersHeader, BorderLayout.NORTH);
         JScrollPane usersScroll = new JScrollPane(usersList);
+        usersList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         usersScroll.setPreferredSize(new java.awt.Dimension(140, 0));
         usersPanel.add(usersScroll, BorderLayout.CENTER);
-        usersPanel.add(privateButton, BorderLayout.SOUTH);
+        JPanel userButtons = new JPanel(new GridLayout(2, 1));
+        userButtons.add(privateButton);
+        userButtons.add(createGroupButton);
+        usersPanel.add(userButtons, BorderLayout.SOUTH);
         add(usersPanel, BorderLayout.EAST);
         add(inputPanel, BorderLayout.SOUTH);
         setConnected(false);
@@ -119,6 +128,7 @@ public class ChatWindow extends JFrame {
         });
         sendButton.addActionListener(event -> sendMessage());
         privateButton.addActionListener(event -> openSelectedChat());
+        createGroupButton.addActionListener(event -> createGroup());
         leaveButton.addActionListener(event -> leaveChat());
         inputField.addActionListener(event -> sendMessage());
         addWindowListener(new WindowAdapter() {
@@ -204,6 +214,14 @@ public class ChatWindow extends JFrame {
                                 updateOnlineUsers(received.substring(7));
                             } else if (received.startsWith("@pm:") && !observing) {
                                 receivePrivate(received);
+                            } else if (received.startsWith("@group:") && !observing) {
+                                receiveGroup(received);
+                            } else if (received.startsWith("@notice:")) {
+                                try {
+                                    appendMessage(new String(Base64.getDecoder().decode(received.substring(8)), StandardCharsets.UTF_8));
+                                } catch (IllegalArgumentException exception) {
+                                    appendMessage("Received an invalid notification.");
+                                }
                             } else if (!observing) {
                                 appendMessage(received);
                             }
@@ -236,6 +254,11 @@ public class ChatWindow extends JFrame {
             leaveChat();
         } else if (chats.getSelectedIndex() == 0) {
             output.println(message);
+        } else if (groupChats.containsValue(chats.getSelectedComponent())) {
+            String groupId = groupChats.entrySet().stream()
+                    .filter(entry -> entry.getValue() == chats.getSelectedComponent())
+                    .map(Map.Entry::getKey).findFirst().orElseThrow();
+            output.println("@group-send:" + groupId + ":" + encode(message));
         } else {
             String target = chats.getTitleAt(chats.getSelectedIndex());
             String encodedTarget = Base64.getEncoder().encodeToString(target.getBytes(StandardCharsets.UTF_8));
@@ -245,17 +268,64 @@ public class ChatWindow extends JFrame {
     }
 
     private void openSelectedChat() {
-        String target = usersList.getSelectedValue();
-        if (target == null) {
-            JOptionPane.showMessageDialog(this, "Select an online user first.");
+        List<String> selected = usersList.getSelectedValuesList();
+        if (selected.size() != 1) {
+            JOptionPane.showMessageDialog(this, "Select exactly one online user.");
             return;
         }
+        String target = selected.get(0);
         if (target.equalsIgnoreCase(activeName)) {
             JOptionPane.showMessageDialog(this, "Select another user.");
             return;
         }
         JTextArea area = privateChat(target);
         chats.setSelectedComponent(area.getParent().getParent());
+    }
+
+    private void createGroup() {
+        List<String> members = usersList.getSelectedValuesList().stream()
+                .filter(name -> !name.equalsIgnoreCase(activeName)).collect(Collectors.toList());
+        if (members.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Select at least one other online user. Hold Ctrl to select more.");
+            return;
+        }
+        String name = JOptionPane.showInputDialog(this, "Group name:");
+        if (name == null) return;
+        name = name.strip();
+        if (name.isEmpty() || name.length() > 80 || name.contains("\n") || name.contains("\r")) {
+            JOptionPane.showMessageDialog(this, "Enter a group name of up to 80 characters.");
+            return;
+        }
+        output.println("@group-create:" + encode(name) + ":"
+                + members.stream().map(ChatWindow::encode).collect(Collectors.joining(",")));
+    }
+
+    private static String encode(String text) {
+        return Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void receiveGroup(String message) {
+        String[] parts = message.substring(7).split(":", 3);
+        if (parts.length != 3) return;
+        try {
+            String name = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
+            JScrollPane pane = groupChats.get(parts[0]);
+            if (pane == null) {
+                JTextArea area = new JTextArea();
+                area.setEditable(false);
+                area.setLineWrap(true);
+                area.setWrapStyleWord(true);
+                pane = new JScrollPane(area);
+                groupChats.put(parts[0], pane);
+                chats.addTab("Group: " + name, pane);
+            }
+            JTextArea area = (JTextArea) pane.getViewport().getView();
+            area.append(text + "\n");
+            area.setCaretPosition(area.getDocument().getLength());
+        } catch (IllegalArgumentException exception) {
+            appendMessage("Received an invalid group message.");
+        }
     }
 
     // 每位對象有獨立的文字區；收到私訊時也會自動建立分頁。
@@ -291,6 +361,7 @@ public class ChatWindow extends JFrame {
         }
         observing = true;
         output.println("@leave");
+        clearGroupChats();
         setConnected(false);
         inputField.setText("");
         appendMessage("You left the chat.");
@@ -327,6 +398,12 @@ public class ChatWindow extends JFrame {
     private void clearPrivateChats() {
         while (chats.getTabCount() > 1) chats.removeTabAt(1);
         privateChats.clear();
+        groupChats.clear();
+    }
+
+    private void clearGroupChats() {
+        for (JScrollPane pane : groupChats.values()) chats.remove(pane);
+        groupChats.clear();
     }
 
     private static void closeSocket(Socket socket) {
@@ -350,6 +427,7 @@ public class ChatWindow extends JFrame {
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
         privateButton.setEnabled(connected);
+        createGroupButton.setEnabled(connected);
         leaveButton.setEnabled(connected);
     }
 
@@ -360,7 +438,7 @@ public class ChatWindow extends JFrame {
 
     // 伺服器每次傳送完整名單，以最新名單取代舊內容。
     private void updateOnlineUsers(String encodedNames) {
-        String selected = usersList.getSelectedValue();
+        List<String> selected = usersList.getSelectedValuesList();
         onlineUsers.clear();
         if (!encodedNames.isEmpty()) {
             for (String encoded : encodedNames.split(",")) {
@@ -373,7 +451,8 @@ public class ChatWindow extends JFrame {
                 }
             }
         }
-        if (selected != null) usersList.setSelectedValue(selected, true);
+        int[] indexes = selected.stream().mapToInt(onlineUsers::indexOf).filter(index -> index >= 0).toArray();
+        usersList.setSelectedIndices(indexes);
     }
 
     public static void main(String[] args) {

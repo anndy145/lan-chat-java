@@ -14,6 +14,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Base64;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.UUID;
+import java.time.LocalDateTime;
 
 /** TCP LAN chat server. Run: java -cp out server.Server [port] */
 public class Server {
@@ -22,6 +27,16 @@ public class Server {
 
     private final int port;
     private final Set<ClientSession> clients = ConcurrentHashMap.newKeySet();
+    private final Map<String, ChatGroup> groups = new HashMap<>();
+
+    private static class ChatGroup {
+        final String name;
+        final Set<ClientSession> members;
+        ChatGroup(String name, Set<ClientSession> members) {
+            this.name = name;
+            this.members = members;
+        }
+    }
 
     public Server(int port) {
         this.port = port;
@@ -79,10 +94,74 @@ public class Server {
                 }
                 sendPrivateLine(recipient, sender.getName(), timestamped(sender.getName() + ": " + text));
                 sendPrivateLine(sender, recipient.getName(), timestamped("You: " + text));
+                audit(sender.getName(), recipient.getName());
                 return;
             }
         }
         sendPrivateLine(sender, recipientName, "User is no longer online: " + recipientName);
+    }
+
+    public synchronized void sendPublic(ClientSession sender, String text) {
+        if (!sender.isActive()) return;
+        String recipients = clients.stream().filter(ClientSession::isActive)
+                .filter(client -> client != sender).map(ClientSession::getName).sorted()
+                .collect(Collectors.joining(", "));
+        broadcast(timestamped(sender.getName() + ": " + text));
+        audit(sender.getName(), "public [" + recipients + "]");
+    }
+
+    public synchronized void createGroup(ClientSession creator, String name, String[] requestedMembers) {
+        if (!creator.isActive() || name.isBlank() || name.length() > 80 || requestedMembers.length == 0) {
+            creator.send("@notice:" + encode("Enter a group name and select at least one online user."));
+            return;
+        }
+        Set<ClientSession> members = new LinkedHashSet<>();
+        members.add(creator);
+        for (String requested : requestedMembers) {
+            ClientSession match = clients.stream().filter(ClientSession::isActive)
+                    .filter(client -> client.getName().equalsIgnoreCase(requested)).findFirst().orElse(null);
+            if (match == null || match == creator) {
+                creator.send("@notice:" + encode("A selected user is unavailable: " + requested));
+                return;
+            }
+            members.add(match);
+        }
+        if (members.size() < 2) {
+            creator.send("@notice:" + encode("Select at least one other user."));
+            return;
+        }
+        String id = UUID.randomUUID().toString();
+        groups.put(id, new ChatGroup(name, members));
+        String announcement = "@group:" + id + ":" + encode(name) + ":" + encode("Group created by " + creator.getName() + ".");
+        members.forEach(member -> member.send(announcement));
+    }
+
+    public synchronized void sendGroup(ClientSession sender, String id, String text) {
+        ChatGroup group = groups.get(id);
+        if (!sender.isActive() || group == null || !group.members.contains(sender)) {
+            sender.send("@notice:" + encode("You are no longer a member of this group."));
+            return;
+        }
+        String payload = "@group:" + id + ":" + encode(group.name) + ":"
+                + encode(timestamped(sender.getName() + ": " + text));
+        group.members.forEach(member -> member.send(payload));
+        String recipients = group.members.stream().filter(member -> member != sender)
+                .map(ClientSession::getName).sorted().collect(Collectors.joining(", "));
+        audit(sender.getName(), "group [" + recipients + "]");
+    }
+
+    private static String encode(String value) {
+        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void audit(String sender, String recipients) {
+        System.out.println("[" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + "] from=" + sender + " to=" + recipients);
+    }
+
+    private void removeFromGroups(ClientSession session) {
+        groups.values().forEach(group -> group.members.remove(session));
+        groups.values().removeIf(group -> group.members.isEmpty());
     }
 
     private void sendPrivateLine(ClientSession recipient, String peer, String text) {
@@ -94,6 +173,7 @@ public class Server {
     public synchronized void setActive(ClientSession session, boolean active) {
         if (clients.contains(session) && session.isActive() != active) {
             session.setActive(active);
+            if (!active) removeFromGroups(session);
             broadcastUsers();
             broadcast(timestamped(session.getName() + (active ? " joined the chat." : " left the chat.")));
         }
@@ -101,6 +181,7 @@ public class Server {
 
     public synchronized void remove(ClientSession session) {
         if (clients.remove(session)) {
+            removeFromGroups(session);
             broadcastUsers();
         }
     }
@@ -125,7 +206,6 @@ public class Server {
                 client.send(message);
             }
         }
-        System.out.println(message);
     }
 
     public String timestamped(String message) {

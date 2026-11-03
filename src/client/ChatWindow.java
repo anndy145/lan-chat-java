@@ -142,16 +142,27 @@ public class ChatWindow extends JFrame {
     private void connect(boolean observeOnly) {
         String host = hostField.getText().strip();
         String name = nameField.getText().strip();
+        if (host.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter a server IP or hostname.");
+            hostField.requestFocusInWindow();
+            return;
+        }
         int port;
         try {
             port = Integer.parseInt(portField.getText().strip());
-            if (port < 1 || port > 65535 || host.isEmpty() || (!observeOnly && name.isEmpty())) {
-                throw new IllegalArgumentException();
-            }
-        } catch (IllegalArgumentException exception) {
-            JOptionPane.showMessageDialog(this, observeOnly
-                    ? "Enter a server IP and a port from 1 to 65535."
-                    : "Enter a server IP, a name, and a port from 1 to 65535.");
+        } catch (NumberFormatException exception) {
+            JOptionPane.showMessageDialog(this, "Port must be a number from 1 to 65535.");
+            portField.requestFocusInWindow();
+            return;
+        }
+        if (port < 1 || port > 65535) {
+            JOptionPane.showMessageDialog(this, "Port must be between 1 and 65535.");
+            portField.requestFocusInWindow();
+            return;
+        }
+        if (!observeOnly && name.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter a name.");
+            nameField.requestFocusInWindow();
             return;
         }
 

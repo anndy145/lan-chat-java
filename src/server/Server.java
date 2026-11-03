@@ -69,6 +69,7 @@ public class Server {
     }
 
     public synchronized boolean join(ClientSession session, String name) {
+        if (clients.contains(session) && session.isActive()) return false;
         boolean taken = clients.stream().anyMatch(client -> client != session
                 && client.isActive() && client.getName().equalsIgnoreCase(name));
         if (taken) {
@@ -78,6 +79,7 @@ public class Server {
         session.setName(name);
         clients.add(session);
         session.setActive(true);
+        logEvent("joined", name);
         session.send("@joined");
         broadcastUsers();
         broadcast(timestamped(name + " joined the chat."));
@@ -159,6 +161,11 @@ public class Server {
                 + "] from=" + sender + " to=" + recipients);
     }
 
+    private void logEvent(String event, String name) {
+        System.out.println("[" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + "] " + event + " user=" + name);
+    }
+
     private void removeFromGroups(ClientSession session) {
         groups.values().forEach(group -> group.members.remove(session));
         groups.values().removeIf(group -> group.members.isEmpty());
@@ -173,14 +180,19 @@ public class Server {
     public synchronized void setActive(ClientSession session, boolean active) {
         if (clients.contains(session) && session.isActive() != active) {
             session.setActive(active);
+            logEvent(active ? "joined" : "left", session.getName());
             if (!active) removeFromGroups(session);
             broadcastUsers();
             broadcast(timestamped(session.getName() + (active ? " joined the chat." : " left the chat.")));
         }
     }
 
-    public synchronized void remove(ClientSession session) {
+    public synchronized void remove(ClientSession session, boolean requestedQuit) {
         if (clients.remove(session)) {
+            if (session.isActive()) {
+                logEvent(requestedQuit ? "left" : "disconnected", session.getName());
+                broadcast(timestamped(session.getName() + " left the chat."));
+            }
             removeFromGroups(session);
             broadcastUsers();
         }

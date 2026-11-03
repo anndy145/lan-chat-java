@@ -24,6 +24,7 @@ class ClientSession implements Runnable {
 
     @Override
     public void run() {
+        boolean requestedQuit = false;
         try (Socket ignored = socket;
              BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
              PrintWriter writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
@@ -44,6 +45,7 @@ class ClientSession implements Runnable {
             String line;
             while ((line = input.readLine()) != null) {
                 if ("/quit".equalsIgnoreCase(line.trim())) {
+                    requestedQuit = true;
                     break;
                 }
                 if ("@leave".equals(line)) {
@@ -101,14 +103,10 @@ class ClientSession implements Runnable {
                 }
             }
         } catch (IOException exception) {
-            System.out.println("Connection lost: " + socket.getRemoteSocketAddress());
+            // 關閉連線時由 Server 統一記錄狀態，避免重複訊息。
         } finally {
             if (name != null) {
-                boolean wasActive = isActive();
-                server.remove(this);
-                if (wasActive) {
-                    server.broadcast(server.timestamped(name + " left the chat."));
-                }
+                server.remove(this, requestedQuit);
             }
         }
     }

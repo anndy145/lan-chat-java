@@ -36,6 +36,7 @@ public class Server implements AutoCloseable {
     private static class ChatGroup {
         final String name;
         final Set<ClientSession> members;
+
         ChatGroup(String name, Set<ClientSession> members) {
             this.name = name;
             this.members = members;
@@ -48,7 +49,9 @@ public class Server implements AutoCloseable {
 
     public static void main(String[] args) {
         int port = parsePort(args);
-        new Server(port).start();
+        try (Server server = new Server(port)) {
+            server.start();
+        }
     }
 
     public void start() {
@@ -67,7 +70,8 @@ public class Server implements AutoCloseable {
     // 先綁定連接埠，呼叫者確認成功後再啟動接受連線的執行緒。
     public void bind() throws IOException {
         synchronized (lifecycleLock) {
-            if (closed || listener != null) throw new IllegalStateException("Server already started or closed");
+            if (closed || listener != null)
+                throw new IllegalStateException("Server already started or closed");
             listener = new ServerSocket(port);
         }
     }
@@ -75,7 +79,8 @@ public class Server implements AutoCloseable {
     public void serve() throws IOException {
         ServerSocket serverSocket;
         synchronized (lifecycleLock) {
-            if (listener == null) throw new IllegalStateException("Server is not bound");
+            if (listener == null)
+                throw new IllegalStateException("Server is not bound");
             serverSocket = listener;
         }
         try {
@@ -98,17 +103,20 @@ public class Server implements AutoCloseable {
                 }
             }
         } catch (IOException exception) {
-            if (!serverSocket.isClosed()) throw exception;
+            if (!serverSocket.isClosed())
+                throw exception;
         }
     }
 
     @Override
     public void close() {
         synchronized (lifecycleLock) {
-            if (closed) return;
+            if (closed)
+                return;
             closed = true;
             try {
-                if (listener != null) listener.close();
+                if (listener != null)
+                    listener.close();
             } catch (IOException ignored) {
                 // 已關閉或無法關閉時仍繼續釋放其他連線。
             }
@@ -128,12 +136,14 @@ public class Server implements AutoCloseable {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
-                if (!networkInterface.isUp() || networkInterface.isLoopback()) continue;
+                if (!networkInterface.isUp() || networkInterface.isLoopback())
+                    continue;
                 Enumeration<java.net.InetAddress> addresses = networkInterface.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     java.net.InetAddress address = addresses.nextElement();
                     if (address instanceof Inet4Address && !address.isLoopbackAddress()) {
-                        if (result.length() > 0) result.append(", ");
+                        if (result.length() > 0)
+                            result.append(", ");
                         result.append(address.getHostAddress());
                     }
                 }
@@ -150,7 +160,8 @@ public class Server implements AutoCloseable {
     }
 
     public synchronized boolean join(ClientSession session, String name) {
-        if (clients.contains(session) && session.isActive()) return false;
+        if (clients.contains(session) && session.isActive())
+            return false;
         boolean taken = clients.stream().anyMatch(client -> client != session
                 && client.isActive() && client.getName().equals(name));
         if (taken) {
@@ -168,7 +179,8 @@ public class Server implements AutoCloseable {
     }
 
     public synchronized void sendPrivate(ClientSession sender, String recipientName, String text) {
-        if (!sender.isActive()) return;
+        if (!sender.isActive())
+            return;
         for (ClientSession recipient : clients) {
             if (recipient.isActive() && recipient.getName().equals(recipientName)) {
                 if (recipient == sender) {
@@ -185,7 +197,8 @@ public class Server implements AutoCloseable {
     }
 
     public synchronized void sendPublic(ClientSession sender, String text) {
-        if (!sender.isActive()) return;
+        if (!sender.isActive())
+            return;
         String recipients = clients.stream().filter(ClientSession::isActive)
                 .filter(client -> client != sender).map(ClientSession::getName).sorted()
                 .collect(Collectors.joining(", "));
@@ -215,7 +228,8 @@ public class Server implements AutoCloseable {
         }
         String id = UUID.randomUUID().toString();
         groups.put(id, new ChatGroup(name, members));
-        String announcement = "@group:" + id + ":" + encode(name) + ":" + encode("Group created by " + creator.getName() + ".");
+        String announcement = "@group:" + id + ":" + encode(name) + ":"
+                + encode("Group created by " + creator.getName() + ".");
         members.forEach(member -> member.send(announcement));
     }
 
@@ -262,7 +276,8 @@ public class Server implements AutoCloseable {
         if (clients.contains(session) && session.isActive() != active) {
             session.setActive(active);
             logEvent(active ? "joined" : "left", session.getName());
-            if (!active) removeFromGroups(session);
+            if (!active)
+                removeFromGroups(session);
             broadcastUsers();
             broadcast(timestamped(session.getName() + (active ? " joined the chat." : " left the chat.")));
         }
@@ -352,4 +367,3 @@ public class Server implements AutoCloseable {
         }
     }
 }
-

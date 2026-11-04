@@ -6,7 +6,7 @@
 
 ## 編譯
 
-安裝 JDK 後，在專案根目錄執行：
+在專案根目錄執行：
 
 ```cmd
 javac -encoding UTF-8 -d out src\server\*.java src\client\*.java
@@ -14,7 +14,7 @@ javac -encoding UTF-8 -d out src\server\*.java src\client\*.java
 
 ## 下載 Windows 免安裝版
 
-在 GitHub 的 Actions 頁面開啟成功的 `Build Windows portable client` 執行紀錄，從 Artifacts 下載 `LanChatClient-Windows-x64`。解壓縮後執行 `LanChatClient.exe`，並保留旁邊的 `app` 和 `runtime` 資料夾。Client 不需要另外安裝 Java；聊天時仍需連接已啟動的 Server。此流程會在推送至 `main` 時執行，也可以手動執行。
+在 GitHub 的 Actions 頁面開啟成功的 `Build Windows portable client` 執行紀錄，從 Artifacts 下載 `LanChatClient-Windows-x64`。解壓縮後執行 `LanChatClient.exe`，並保留旁邊的 `app` 和 `runtime` 資料夾。Client 不需要另外安裝 Java，可連接現有 Server 或啟動臨時 Server。此流程會在推送至 `main` 時執行，也可以手動執行。
 
 ## 使用方式
 
@@ -31,6 +31,8 @@ java -cp "out;resources" client.ChatWindow
 ```
 
 輸入 Server 的 IP、連接埠和暱稱，按「連線」即可聊天。同一台電腦測試時，IP 使用 `127.0.0.1`；其他電腦則使用 Server 的內網 IPv4 位址。
+
+若沒有 Server，可在 Client 輸入 port 後按 `Start temporary server`。畫面會顯示主機的內網 IPv4 位址，提供給其他電腦使用；主機自己再輸入暱稱並按 `Connect`。按 `Stop temporary server` 或關閉主機視窗會斷開所有使用者。臨時 Server 只保留執行期間的聊天狀態，不提供帳號或保存聊天紀錄。
 
 在線上名單選擇使用者並按 `Create group`，輸入群組名稱即可建立群組；按住 Ctrl 可選取多人。群組成員會收到各自的聊天分頁。使用者離開聊天室或斷線時會離開群組，群組不會永久保存。
 

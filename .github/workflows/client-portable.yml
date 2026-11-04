@@ -25,12 +25,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out/classes, out/input, out/portable | Out-Null
-          javac -encoding UTF-8 -d out/classes src/client/*.java
+          javac -encoding UTF-8 -d out/classes src/client/*.java src/server/*.java
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create client JAR
         shell: pwsh
-        run: jar --create --file out/input/client.jar --main-class client.ChatWindow -C out/classes client -C resources buttons
+        run: jar --create --file out/input/client.jar --main-class client.ChatWindow -C out/classes client -C out/classes server -C resources buttons
 
       - name: Create portable application
         shell: pwsh

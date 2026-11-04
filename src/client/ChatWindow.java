@@ -32,6 +32,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.ListSelectionModel;
 import java.util.List;
 import java.util.stream.Collectors;
+import server.Server;
 
 public class ChatWindow extends JFrame {
     private final JTextField hostField = new JTextField("127.0.0.1");
@@ -39,6 +40,7 @@ public class ChatWindow extends JFrame {
     private final JTextField nameField = new JTextField();
     private final JButton connectButton = new JButton("Connect");
     private final JButton viewUsersButton = new JButton("View online users");
+    private final JButton hostButton = new JButton("Start temporary server");
     private final JTextArea chatArea = new JTextArea();
     private final JTextField inputField = new JTextField();
     private final JButton sendButton = new JButton("Send");
@@ -59,6 +61,9 @@ public class ChatWindow extends JFrame {
     private boolean observing;
     private boolean joining;
     private long connectionGeneration;
+    private Server temporaryServer;
+    private boolean startingServer;
+    private long serverGeneration;
 
     public ChatWindow() {
         super("Chat Room");
@@ -89,7 +94,10 @@ public class ChatWindow extends JFrame {
         buttonsPanel.add(sendButton);
         buttonsPanel.add(leaveButton);
         inputPanel.add(buttonsPanel, BorderLayout.EAST);
-        add(connectionPanel, BorderLayout.NORTH);
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(connectionPanel, BorderLayout.CENTER);
+        topPanel.add(hostButton, BorderLayout.SOUTH);
+        add(topPanel, BorderLayout.NORTH);
         add(chats, BorderLayout.CENTER);
         JPanel usersPanel = new JPanel(new BorderLayout());
         JPanel usersHeader = new JPanel(new BorderLayout());
@@ -130,6 +138,10 @@ public class ChatWindow extends JFrame {
                 connect(true);
             }
         });
+        hostButton.addActionListener(event -> {
+            if (temporaryServer != null) stopTemporaryServer();
+            else startTemporaryServer();
+        });
         sendButton.addActionListener(event -> sendMessage());
         privateButton.addActionListener(event -> openSelectedChat());
         createGroupButton.addActionListener(event -> createGroup());
@@ -139,8 +151,73 @@ public class ChatWindow extends JFrame {
             @Override
             public void windowClosed(WindowEvent event) {
                 closeConnection();
+                stopTemporaryServer();
             }
         });
+    }
+
+    private void startTemporaryServer() {
+        int port;
+        try {
+            port = Integer.parseInt(portField.getText().strip());
+            if (port < 1 || port > 65535) throw new NumberFormatException();
+        } catch (NumberFormatException exception) {
+            JOptionPane.showMessageDialog(this, "Port must be a number from 1 to 65535.");
+            return;
+        }
+        startingServer = true;
+        long generation = ++serverGeneration;
+        setConnected(false);
+        Thread worker = new Thread(() -> {
+            Server server = new Server(port);
+            try {
+                server.bind();
+                String addresses = Server.lanAddresses();
+                SwingUtilities.invokeLater(() -> {
+                    if (!isDisplayable() || generation != serverGeneration) {
+                        server.close();
+                        return;
+                    }
+                    temporaryServer = server;
+                    startingServer = false;
+                    hostField.setText("127.0.0.1");
+                    setConnected(false);
+                    appendMessage("Temporary server started on port " + port + ". LAN IP: " + addresses);
+                });
+                server.serve();
+                SwingUtilities.invokeLater(() -> {
+                    if (generation == serverGeneration && temporaryServer == server) {
+                        temporaryServer = null;
+                        setConnected(socket != null && !observing);
+                        appendMessage("Temporary server stopped.");
+                    }
+                });
+            } catch (IOException exception) {
+                SwingUtilities.invokeLater(() -> {
+                    if (generation != serverGeneration || !isDisplayable()) return;
+                    temporaryServer = null;
+                    startingServer = false;
+                    setConnected(socket != null && !observing);
+                    appendMessage("Temporary server failed: " + exception.getMessage());
+                });
+            } finally {
+                server.close();
+            }
+        }, "temporary-server");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void stopTemporaryServer() {
+        serverGeneration++;
+        startingServer = false;
+        Server server = temporaryServer;
+        temporaryServer = null;
+        if (server != null) {
+            server.close();
+            appendMessage("Temporary server stopped.");
+        }
+        setConnected(socket != null && !observing);
     }
 
     // 載入按鈕圖示；若找不到圖片，保留按鈕原本的文字。
@@ -453,13 +530,15 @@ public class ChatWindow extends JFrame {
     }
 
     private void setConnected(boolean connected) {
-        hostField.setEnabled(!connected && !observing && !connecting);
-        portField.setEnabled(!connected && !observing && !connecting);
-        nameField.setEnabled(!connected && !connecting && !joining);
+        hostField.setEnabled(!connected && !observing && !connecting && !startingServer && temporaryServer == null);
+        portField.setEnabled(!connected && !observing && !connecting && !startingServer && temporaryServer == null);
+        nameField.setEnabled(!connected && !connecting && !joining && !startingServer);
         connectButton.setText(observing ? "Join chat" : "Connect");
-        connectButton.setEnabled(!connected && !connecting && !joining);
+        connectButton.setEnabled(!connected && !connecting && !joining && !startingServer);
         viewUsersButton.setText(observing ? "Disconnect" : "View online users");
-        viewUsersButton.setEnabled(!connected && !connecting && !joining);
+        viewUsersButton.setEnabled(!connected && !connecting && !joining && !startingServer);
+        hostButton.setText(temporaryServer == null ? "Start temporary server" : "Stop temporary server");
+        hostButton.setEnabled(!startingServer && (temporaryServer != null || (!connected && !observing && !connecting)));
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
         privateButton.setEnabled(connected);

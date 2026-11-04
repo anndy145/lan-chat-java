@@ -17,6 +17,8 @@ Server 使用 TCP `ServerSocket` 接受連線。每個 Client 透過一條 TCP S
 
 Server 預設使用 port `5487`，也可從命令列指定 `1` 到 `65535` 的 port。Server 成功建立 `ServerSocket` 後才顯示啟動訊息。
 
+GUI 的 `Start temporary server` 使用目前的匿名聊天 Server 實作，先在背景執行緒綁定指定 port，再等待連線。主機可用 `127.0.0.1` 連線，其他電腦使用畫面列出的內網位址。按下 `Stop temporary server` 或關閉主機視窗會關閉監聽及所有連線。臨時 Server 不提供帳號，也不保存聊天室資料；若日後加入帳號功能，需要維持這個模式的界線。
+
 GUI Client 連線後先送出 `@observe`，取得線上使用者名單。使用者加入聊天時，Client 送出 `@join:<name>`，其中 `name` 是以 UTF-8 編碼後再轉成 Base64 的暱稱。Server 檢查暱稱，成功時回傳 `@joined`，重複時回傳 `@error:name`。線上暱稱比較區分大小寫，例如 `Andy` 和 `andy` 是不同使用者。
 
 使用者按下 **Leave** 後，GUI 傳送 `@leave`。Server 移除其群組成員資格，但保留連線並繼續傳送線上名單。使用者可再次加入聊天，或按 **Disconnect** 關閉連線。命令列 Client 的第一行直接傳送暱稱，`/quit` 會關閉連線。

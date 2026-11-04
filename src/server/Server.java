@@ -21,12 +21,16 @@ import java.util.UUID;
 import java.time.LocalDateTime;
 
 /** TCP LAN chat server. Run: java -cp out server.Server [port] */
-public class Server {
+public class Server implements AutoCloseable {
     private static final int DEFAULT_PORT = 5487;
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final int port;
     private final Set<ClientSession> clients = ConcurrentHashMap.newKeySet();
+    private final Set<Socket> sockets = ConcurrentHashMap.newKeySet();
+    private final Object lifecycleLock = new Object();
+    private ServerSocket listener;
+    private boolean closed;
     private final Map<String, ChatGroup> groups = new HashMap<>();
 
     private static class ChatGroup {
@@ -48,18 +52,96 @@ public class Server {
     }
 
     public void start() {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
+        try {
+            bind();
             System.out.println("Chat server started on port " + port + ".");
             printLanAddresses();
-            while (true) {
-                Socket socket = serverSocket.accept();
-                ClientSession session = new ClientSession(socket, this);
-                Thread thread = new Thread(session, "client-" + socket.getRemoteSocketAddress());
-                thread.start();
-            }
+            serve();
         } catch (IOException exception) {
             System.err.println("Server error: " + exception.getMessage());
+        } finally {
+            close();
         }
+    }
+
+    // 先綁定連接埠，呼叫者確認成功後再啟動接受連線的執行緒。
+    public void bind() throws IOException {
+        synchronized (lifecycleLock) {
+            if (closed || listener != null) throw new IllegalStateException("Server already started or closed");
+            listener = new ServerSocket(port);
+        }
+    }
+
+    public void serve() throws IOException {
+        ServerSocket serverSocket;
+        synchronized (lifecycleLock) {
+            if (listener == null) throw new IllegalStateException("Server is not bound");
+            serverSocket = listener;
+        }
+        try {
+            while (true) {
+                Socket socket = serverSocket.accept();
+                synchronized (lifecycleLock) {
+                    if (closed) {
+                        socket.close();
+                        break;
+                    }
+                    sockets.add(socket);
+                    Thread thread = new Thread(() -> {
+                        try {
+                            new ClientSession(socket, this).run();
+                        } finally {
+                            sockets.remove(socket);
+                        }
+                    }, "client-" + socket.getRemoteSocketAddress());
+                    thread.start();
+                }
+            }
+        } catch (IOException exception) {
+            if (!serverSocket.isClosed()) throw exception;
+        }
+    }
+
+    @Override
+    public void close() {
+        synchronized (lifecycleLock) {
+            if (closed) return;
+            closed = true;
+            try {
+                if (listener != null) listener.close();
+            } catch (IOException ignored) {
+                // 已關閉或無法關閉時仍繼續釋放其他連線。
+            }
+            for (Socket socket : sockets) {
+                try {
+                    socket.close();
+                } catch (IOException ignored) {
+                    // 繼續關閉其餘連線。
+                }
+            }
+        }
+    }
+
+    public static String lanAddresses() {
+        StringBuilder result = new StringBuilder();
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                if (!networkInterface.isUp() || networkInterface.isLoopback()) continue;
+                Enumeration<java.net.InetAddress> addresses = networkInterface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    java.net.InetAddress address = addresses.nextElement();
+                    if (address instanceof Inet4Address && !address.isLoopbackAddress()) {
+                        if (result.length() > 0) result.append(", ");
+                        result.append(address.getHostAddress());
+                    }
+                }
+            }
+        } catch (SocketException ignored) {
+            return "unavailable";
+        }
+        return result.length() == 0 ? "unavailable" : result.toString();
     }
 
     public synchronized void add(ClientSession session) {

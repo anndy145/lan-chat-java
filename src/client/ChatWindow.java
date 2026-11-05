@@ -1,6 +1,7 @@
 package client;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.GridLayout;
 import java.awt.Image;
 import java.awt.event.WindowAdapter;
@@ -17,6 +18,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.swing.DefaultListModel;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
@@ -106,6 +108,18 @@ public class ChatWindow extends JFrame {
         usersPanel.add(usersHeader, BorderLayout.NORTH);
         JScrollPane usersScroll = new JScrollPane(usersList);
         usersList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        // 僅改變顯示文字，名單內仍保留原始暱稱供私訊及群組使用。
+        usersList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                    boolean selected, boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                if (!observing && !joining && socket != null && value.equals(activeName)) {
+                    setText(value + " (You)");
+                }
+                return this;
+            }
+        });
         usersScroll.setPreferredSize(new java.awt.Dimension(140, 0));
         usersPanel.add(usersScroll, BorderLayout.CENTER);
         JPanel userButtons = new JPanel(new GridLayout(2, 1));
@@ -139,8 +153,10 @@ public class ChatWindow extends JFrame {
             }
         });
         hostButton.addActionListener(event -> {
-            if (temporaryServer != null) stopTemporaryServer();
-            else startTemporaryServer();
+            if (temporaryServer != null)
+                stopTemporaryServer();
+            else
+                startTemporaryServer();
         });
         sendButton.addActionListener(event -> sendMessage());
         privateButton.addActionListener(event -> openSelectedChat());
@@ -160,7 +176,8 @@ public class ChatWindow extends JFrame {
         int port;
         try {
             port = Integer.parseInt(portField.getText().strip());
-            if (port < 1 || port > 65535) throw new NumberFormatException();
+            if (port < 1 || port > 65535)
+                throw new NumberFormatException();
         } catch (NumberFormatException exception) {
             JOptionPane.showMessageDialog(this, "Port must be a number from 1 to 65535.");
             return;
@@ -194,7 +211,8 @@ public class ChatWindow extends JFrame {
                 });
             } catch (IOException exception) {
                 SwingUtilities.invokeLater(() -> {
-                    if (generation != serverGeneration || !isDisplayable()) return;
+                    if (generation != serverGeneration || !isDisplayable())
+                        return;
                     temporaryServer = null;
                     startingServer = false;
                     setConnected(socket != null && !observing);
@@ -524,12 +542,12 @@ public class ChatWindow extends JFrame {
             try {
                 socket.close();
             } catch (IOException ignored) {
-                // 連線已關閉時，不需要再次處理。
             }
         }
     }
 
     private void setConnected(boolean connected) {
+        usersList.repaint();
         hostField.setEnabled(!connected && !observing && !connecting && !startingServer && temporaryServer == null);
         portField.setEnabled(!connected && !observing && !connecting && !startingServer && temporaryServer == null);
         nameField.setEnabled(!connected && !connecting && !joining && !startingServer);
@@ -538,7 +556,8 @@ public class ChatWindow extends JFrame {
         viewUsersButton.setText(observing ? "Disconnect" : "View online users");
         viewUsersButton.setEnabled(!connected && !connecting && !joining && !startingServer);
         hostButton.setText(temporaryServer == null ? "Start temporary server" : "Stop temporary server");
-        hostButton.setEnabled(!startingServer && (temporaryServer != null || (!connected && !observing && !connecting)));
+        hostButton
+                .setEnabled(!startingServer && (temporaryServer != null || (!connected && !observing && !connecting)));
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
         privateButton.setEnabled(connected);
@@ -571,7 +590,6 @@ public class ChatWindow extends JFrame {
     }
 
     public static void main(String[] args) {
-        // 從 Swing 的介面執行緒建立和顯示視窗。
         SwingUtilities.invokeLater(() -> new ChatWindow().setVisible(true));
     }
 }

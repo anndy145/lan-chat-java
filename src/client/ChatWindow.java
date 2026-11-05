@@ -4,8 +4,11 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.GridLayout;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -56,6 +59,7 @@ public class ChatWindow extends JFrame {
     private final Map<String, JScrollPane> groupChats = new LinkedHashMap<>();
     private final Map<Component, String> tabNames = new LinkedHashMap<>();
     private final Map<Component, Integer> unreadCounts = new LinkedHashMap<>();
+    private final Map<Component, JLabel> tabLabels = new LinkedHashMap<>();
     private String activeName;
     private String activeId;
 
@@ -132,6 +136,17 @@ public class ChatWindow extends JFrame {
         usersPanel.add(usersHeader, BorderLayout.NORTH);
         JScrollPane usersScroll = new JScrollPane(usersList);
         usersList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        usersList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() != 2 || !SwingUtilities.isLeftMouseButton(event)
+                        || !privateButton.isEnabled()) return;
+                int index = usersList.locationToIndex(event.getPoint());
+                if (index >= 0 && usersList.getCellBounds(index, index).contains(event.getPoint())) {
+                    openPrivateChat(onlineUsers.get(index));
+                }
+            }
+        });
         // 僅改變顯示文字，名單內仍保留原始暱稱供私訊及群組使用。
         usersList.setCellRenderer(new DefaultListCellRenderer() {
             @Override
@@ -429,13 +444,17 @@ public class ChatWindow extends JFrame {
             JOptionPane.showMessageDialog(this, "Select exactly one online user.");
             return;
         }
-        OnlineUser target = selected.get(0);
+        openPrivateChat(selected.get(0));
+    }
+
+    private void openPrivateChat(OnlineUser target) {
         if (target.id.equals(activeId)) {
             JOptionPane.showMessageDialog(this, "Select another user.");
             return;
         }
         PrivateChat chat = privateChat(target.id, target.name);
         chats.setSelectedComponent(chat.pane);
+        inputField.requestFocusInWindow();
     }
 
     private void createGroup() {
@@ -477,6 +496,8 @@ public class ChatWindow extends JFrame {
                 pane = new JScrollPane(area);
                 groupChats.put(parts[0], pane);
                 addChatTab("Group: " + name, pane);
+            } else if (chats.indexOfComponent(pane) < 0) {
+                addChatTab(tabNames.get(pane), pane);
             }
             JTextArea area = (JTextArea) pane.getViewport().getView();
             area.append(text + "\n");
@@ -489,7 +510,7 @@ public class ChatWindow extends JFrame {
 
     // 每位對象有獨立的文字區；收到私訊時也會自動建立分頁。
     private PrivateChat privateChat(String peerId, String peerName) {
-        return privateChats.computeIfAbsent(peerId, id -> {
+        PrivateChat chat = privateChats.computeIfAbsent(peerId, id -> {
             JTextArea area = new JTextArea();
             area.setEditable(false);
             area.setLineWrap(true);
@@ -498,6 +519,10 @@ public class ChatWindow extends JFrame {
             addChatTab(peerName, pane);
             return new PrivateChat(peerName, area, pane);
         });
+        if (chats.indexOfComponent(chat.pane) < 0) {
+            addChatTab(tabNames.get(chat.pane), chat.pane);
+        }
+        return chat;
     }
 
     private void receivePrivate(String message) {
@@ -508,7 +533,8 @@ public class ChatWindow extends JFrame {
             String peer = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
             PrivateChat chat = privateChats.get(parts[0]);
-            if (chat == null && !peer.isEmpty()) chat = privateChat(parts[0], peer);
+            if (chat != null) chat = privateChat(parts[0], chat.name);
+            else if (!peer.isEmpty()) chat = privateChat(parts[0], peer);
             if (chat == null) { appendMessage(text); return; }
             chat.area.append(text + "\n");
             chat.area.setCaretPosition(chat.area.getDocument().getLength());
@@ -569,12 +595,14 @@ public class ChatWindow extends JFrame {
         groupChats.clear();
         tabNames.clear();
         unreadCounts.clear();
+        tabLabels.clear();
     }
 
     private void clearGroupChats() {
         for (JScrollPane pane : groupChats.values()) {
             tabNames.remove(pane);
             unreadCounts.remove(pane);
+            tabLabels.remove(pane);
             chats.remove(pane);
         }
         groupChats.clear();
@@ -583,6 +611,23 @@ public class ChatWindow extends JFrame {
     private void addChatTab(String name, JScrollPane pane) {
         tabNames.put(pane, name);
         chats.addTab(name, pane);
+        JPanel header = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 3, 0));
+        header.setOpaque(false);
+        JLabel label = new JLabel(name);
+        JButton closeButton = new JButton("×");
+        closeButton.setMargin(new Insets(0, 4, 0, 4));
+        closeButton.setFocusable(false);
+        closeButton.setToolTipText("Close chat tab");
+        closeButton.getAccessibleContext().setAccessibleName("Close chat tab: " + name);
+        closeButton.addActionListener(event -> {
+            chats.remove(pane);
+            tabLabels.remove(pane);
+        });
+        header.add(label);
+        header.add(closeButton);
+        tabLabels.put(pane, label);
+        chats.setTabComponentAt(chats.indexOfComponent(pane), header);
+        refreshTabTitle(pane);
     }
 
     // 未選取的分頁收到訊息時累計；選取該分頁後歸零。
@@ -604,7 +649,10 @@ public class ChatWindow extends JFrame {
         String name = tabNames.get(pane);
         if (index >= 0 && name != null) {
             int count = unreadCounts.getOrDefault(pane, 0);
-            chats.setTitleAt(index, count == 0 ? name : name + " (" + count + ")");
+            String title = count == 0 ? name : name + " (" + count + ")";
+            chats.setTitleAt(index, title);
+            JLabel label = tabLabels.get(pane);
+            if (label != null) label.setText(title);
         }
     }
 

@@ -38,7 +38,7 @@ public class Client {
                 PrintWriter serverOutput = new PrintWriter(
                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
             BufferedReader keyboard = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-            serverOutput.println(name);
+            serverOutput.println("@hello:v2:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
             System.out.println("Connected. Type a message and press Enter. Type /quit to leave.");
 
             AtomicBoolean leaving = new AtomicBoolean(false);
@@ -90,8 +90,11 @@ public class Client {
         try {
             String message;
             while ((message = serverInput.readLine()) != null) {
-                if (message.equals("@joined")) {
+                if (message.startsWith("@joined:")) {
                     continue;
+                } else if (message.equals("@joined") || message.equals("@error:version")) {
+                    System.out.println("Incompatible server version. Update both server and client.");
+                    return;
                 } else if (message.equals("@error:name")) {
                     System.out.println("Name is already in use.");
                 } else if (message.startsWith("@notice:")) {
@@ -113,11 +116,11 @@ public class Client {
                         }
                     }
                 } else if (message.startsWith("@pm:")) {
-                    String[] parts = message.substring(4).split(":", 2);
-                    if (parts.length == 2) {
+                    String[] parts = message.substring(4).split(":", 3);
+                    if (parts.length == 3) {
                         try {
-                            String peer = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8);
-                            String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            String peer = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
                             System.out.println("[Private with " + peer + "] " + text);
                         } catch (IllegalArgumentException exception) {
                             System.out.println("Invalid private message received.");
@@ -130,7 +133,12 @@ public class Client {
                         for (String encoded : encodedNames.split(",")) {
                             if (names.length() > 0)
                                 names.append(", ");
-                            names.append(new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8));
+                            String[] user = encoded.split("=", 2);
+                            if (user.length != 2) {
+                                System.out.println("Incompatible server version. Update both server and client.");
+                                return;
+                            }
+                            names.append(new String(Base64.getDecoder().decode(user[1]), StandardCharsets.UTF_8));
                         }
                     }
                     System.out.println("線上使用者：" + names);

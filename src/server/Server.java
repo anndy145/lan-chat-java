@@ -169,31 +169,32 @@ public class Server implements AutoCloseable {
             return false;
         }
         session.setName(name);
+        session.setUserId(UUID.randomUUID().toString());
         clients.add(session);
         session.setActive(true);
         logEvent("joined", name);
-        session.send("@joined");
+        session.send("@joined:" + session.getUserId());
         broadcastUsers();
         broadcast(timestamped(name + " joined the chat."));
         return true;
     }
 
-    public synchronized void sendPrivate(ClientSession sender, String recipientName, String text) {
+    public synchronized void sendPrivate(ClientSession sender, String recipientId, String text) {
         if (!sender.isActive())
             return;
         for (ClientSession recipient : clients) {
-            if (recipient.isActive() && recipient.getName().equals(recipientName)) {
+            if (recipient.isActive() && recipient.getUserId().equals(recipientId)) {
                 if (recipient == sender) {
-                    sendPrivateLine(sender, recipientName, "You cannot message yourself.");
+                    sendPrivateLine(sender, recipientId, recipient.getName(), "You cannot message yourself.");
                     return;
                 }
-                sendPrivateLine(recipient, sender.getName(), timestamped(sender.getName() + ": " + text));
-                sendPrivateLine(sender, recipient.getName(), timestamped("You: " + text));
+                sendPrivateLine(recipient, sender.getUserId(), sender.getName(), timestamped(sender.getName() + ": " + text));
+                sendPrivateLine(sender, recipient.getUserId(), recipient.getName(), timestamped("You: " + text));
                 audit(sender.getName(), recipient.getName());
                 return;
             }
         }
-        sendPrivateLine(sender, recipientName, "User is no longer online: " + recipientName);
+        sendPrivateLine(sender, recipientId, "", "User is no longer online. Select the user again to start a new chat.");
     }
 
     public synchronized void sendPublic(ClientSession sender, String text) {
@@ -215,9 +216,9 @@ public class Server implements AutoCloseable {
         members.add(creator);
         for (String requested : requestedMembers) {
             ClientSession match = clients.stream().filter(ClientSession::isActive)
-                    .filter(client -> client.getName().equals(requested)).findFirst().orElse(null);
+                    .filter(client -> client.getUserId().equals(requested)).findFirst().orElse(null);
             if (match == null || match == creator) {
-                creator.send("@notice:" + encode("A selected user is unavailable: " + requested));
+                creator.send("@notice:" + encode("A selected user is no longer online."));
                 return;
             }
             members.add(match);
@@ -266,10 +267,10 @@ public class Server implements AutoCloseable {
         groups.values().removeIf(group -> group.members.isEmpty());
     }
 
-    private void sendPrivateLine(ClientSession recipient, String peer, String text) {
+    private void sendPrivateLine(ClientSession recipient, String peerId, String peer, String text) {
         String encodedPeer = Base64.getEncoder().encodeToString(peer.getBytes(StandardCharsets.UTF_8));
         String encodedText = Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
-        recipient.send("@pm:" + encodedPeer + ":" + encodedText);
+        recipient.send("@pm:" + peerId + ":" + encodedPeer + ":" + encodedText);
     }
 
     public synchronized void setActive(ClientSession session, boolean active) {
@@ -298,9 +299,8 @@ public class Server implements AutoCloseable {
     private void broadcastUsers() {
         String names = clients.stream()
                 .filter(ClientSession::isActive)
-                .map(ClientSession::getName)
-                .sorted()
-                .map(name -> Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)))
+                .sorted(java.util.Comparator.comparing(ClientSession::getName))
+                .map(client -> client.getUserId() + "=" + encode(client.getName()))
                 .collect(Collectors.joining(","));
         String message = "@users:" + names;
         for (ClientSession client : clients) {

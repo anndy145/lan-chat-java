@@ -42,6 +42,6 @@ java -cp "out;resources" client.ChatWindow
 java -cp out client.Client <ip address> <port> <username>
 ```
 
-命令列使用者受邀後可用 `/group <group-id> <message>` 回覆；輸入 `/quit` 可離開聊天室。Server 與 Client 請使用相同版本。
+命令列使用者受邀後可用 `/group <group-id> <message>` 回覆；輸入 `/quit` 可離開聊天室。Server 與 Client 請使用相同版本。私訊分頁使用臨時 ID 辨識對象；對方離線後，須從名單重新選擇才能與新連線聊天。
 
 Server 主控台顯示使用者加入、離開或斷線的時間，以及訊息的傳送時間、發送者與收件者；不保存聊天內容。通訊目前未加密。

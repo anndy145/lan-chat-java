@@ -15,6 +15,7 @@ class ClientSession implements Runnable {
     private final Server server;
     private PrintWriter output;
     private String name;
+    private String userId;
     private volatile boolean active = true;
 
     ClientSession(Socket socket, Server server) {
@@ -33,9 +34,19 @@ class ClientSession implements Runnable {
             if (requestedName == null) {
                 return;
             }
-            boolean initialObserver = "@observe".equals(requestedName);
+            boolean initialObserver = "@observe:v2".equals(requestedName);
+            if (!initialObserver && !requestedName.startsWith("@hello:v2:")) {
+                send("@error:version");
+                return;
+            }
             active = false;
-            name = initialObserver ? "Anonymous" : cleanName(requestedName);
+            try {
+                name = initialObserver ? "Anonymous" : cleanName(new String(
+                        Base64.getDecoder().decode(requestedName.substring(10)), StandardCharsets.UTF_8));
+            } catch (IllegalArgumentException exception) {
+                send("@error:version");
+                return;
+            }
             if (initialObserver) {
                 server.add(this);
             } else if (!server.join(this, name)) {
@@ -72,7 +83,7 @@ class ClientSession implements Runnable {
                     String[] parts = line.substring(9).split(":", 2);
                     if (parts.length == 2) {
                         try {
-                            String target = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+                            String target = parts[0];
                             String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
                             if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
                                 server.sendPrivate(this, target, text);
@@ -87,9 +98,6 @@ class ClientSession implements Runnable {
                         if (parts.length == 2 && !parts[1].isEmpty()) {
                             String groupName = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8).strip();
                             String[] members = parts[1].split(",");
-                            for (int i = 0; i < members.length; i++) {
-                                members[i] = new String(Base64.getDecoder().decode(members[i]), StandardCharsets.UTF_8);
-                            }
                             server.createGroup(this, groupName, members);
                         }
                     } catch (IllegalArgumentException exception) {
@@ -128,6 +136,14 @@ class ClientSession implements Runnable {
 
     String getName() {
         return name;
+    }
+
+    String getUserId() {
+        return userId;
+    }
+
+    void setUserId(String userId) {
+        this.userId = userId;
     }
 
     void setName(String name) {

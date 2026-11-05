@@ -49,12 +49,33 @@ public class ChatWindow extends JFrame {
     private final JButton leaveButton = new JButton("Leave");
     private final JButton privateButton = new JButton("Open private chat");
     private final JButton createGroupButton = new JButton("Create group");
-    private final DefaultListModel<String> onlineUsers = new DefaultListModel<>();
-    private final JList<String> usersList = new JList<>(onlineUsers);
+    private final DefaultListModel<OnlineUser> onlineUsers = new DefaultListModel<>();
+    private final JList<OnlineUser> usersList = new JList<>(onlineUsers);
     private final JTabbedPane chats = new JTabbedPane();
-    private final Map<String, JTextArea> privateChats = new LinkedHashMap<>();
+    private final Map<String, PrivateChat> privateChats = new LinkedHashMap<>();
     private final Map<String, JScrollPane> groupChats = new LinkedHashMap<>();
     private String activeName;
+    private String activeId;
+
+    private static final class OnlineUser {
+        final String id;
+        final String name;
+        OnlineUser(String id, String name) { this.id = id; this.name = name; }
+        @Override public String toString() { return name; }
+        @Override public boolean equals(Object other) {
+            return other instanceof OnlineUser && id.equals(((OnlineUser) other).id);
+        }
+        @Override public int hashCode() { return id.hashCode(); }
+    }
+
+    private static final class PrivateChat {
+        final String name;
+        final JTextArea area;
+        final JScrollPane pane;
+        PrivateChat(String name, JTextArea area, JScrollPane pane) {
+            this.name = name; this.area = area; this.pane = pane;
+        }
+    }
 
     // 連線狀態和介面元件只在 Swing 介面執行緒中讀寫。
     private Socket socket;
@@ -114,7 +135,8 @@ public class ChatWindow extends JFrame {
             public Component getListCellRendererComponent(JList<?> list, Object value, int index,
                     boolean selected, boolean focus) {
                 super.getListCellRendererComponent(list, value, index, selected, focus);
-                if (!observing && !joining && socket != null && value.equals(activeName)) {
+                if (!observing && !joining && socket != null && value instanceof OnlineUser
+                        && ((OnlineUser) value).id.equals(activeId)) {
                     setText(value + " (You)");
                 }
                 return this;
@@ -280,6 +302,7 @@ public class ChatWindow extends JFrame {
         connecting = true;
         clearPrivateChats();
         activeName = null;
+        activeId = null;
         long generation = ++connectionGeneration;
         setConnected(false);
         appendMessage("Connecting...");
@@ -293,7 +316,7 @@ public class ChatWindow extends JFrame {
                         new InputStreamReader(newSocket.getInputStream(), StandardCharsets.UTF_8));
                 PrintWriter writer = new PrintWriter(
                         new OutputStreamWriter(newSocket.getOutputStream(), StandardCharsets.UTF_8), true);
-                writer.println("@observe");
+                writer.println("@observe:v2");
                 if (!observeOnly) {
                     writer.println(
                             "@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
@@ -319,7 +342,8 @@ public class ChatWindow extends JFrame {
                     String received = message;
                     SwingUtilities.invokeLater(() -> {
                         if (socket == newSocket) {
-                            if (received.equals("@joined")) {
+                            if (received.startsWith("@joined:")) {
+                                activeId = received.substring(8);
                                 joining = false;
                                 observing = false;
                                 if (activeName != null && !activeName.equals(nameField.getText().strip())) {
@@ -333,6 +357,9 @@ public class ChatWindow extends JFrame {
                                 observing = true;
                                 setConnected(false);
                                 appendMessage("That name is already in use. Choose another name.");
+                            } else if (received.equals("@error:version") || received.equals("@joined")) {
+                                appendMessage("Incompatible server version. Update both server and client.");
+                                closeConnection();
                             } else if (received.startsWith("@users:")) {
                                 updateOnlineUsers(received.substring(7));
                             } else if (received.startsWith("@pm:") && !observing) {
@@ -386,31 +413,31 @@ public class ChatWindow extends JFrame {
                     .map(Map.Entry::getKey).findFirst().orElseThrow();
             output.println("@group-send:" + groupId + ":" + encode(message));
         } else {
-            String target = chats.getTitleAt(chats.getSelectedIndex());
-            String encodedTarget = Base64.getEncoder().encodeToString(target.getBytes(StandardCharsets.UTF_8));
-            String encodedMessage = Base64.getEncoder().encodeToString(message.getBytes(StandardCharsets.UTF_8));
-            output.println("@private:" + encodedTarget + ":" + encodedMessage);
+            String targetId = privateChats.entrySet().stream()
+                    .filter(entry -> entry.getValue().pane == chats.getSelectedComponent())
+                    .map(Map.Entry::getKey).findFirst().orElseThrow();
+            output.println("@private:" + targetId + ":" + encode(message));
         }
     }
 
     private void openSelectedChat() {
-        List<String> selected = usersList.getSelectedValuesList();
+        List<OnlineUser> selected = usersList.getSelectedValuesList();
         if (selected.size() != 1) {
             JOptionPane.showMessageDialog(this, "Select exactly one online user.");
             return;
         }
-        String target = selected.get(0);
-        if (target.equals(activeName)) {
+        OnlineUser target = selected.get(0);
+        if (target.id.equals(activeId)) {
             JOptionPane.showMessageDialog(this, "Select another user.");
             return;
         }
-        JTextArea area = privateChat(target);
-        chats.setSelectedComponent(area.getParent().getParent());
+        PrivateChat chat = privateChat(target.id, target.name);
+        chats.setSelectedComponent(chat.pane);
     }
 
     private void createGroup() {
         List<String> members = usersList.getSelectedValuesList().stream()
-                .filter(name -> !name.equals(activeName)).collect(Collectors.toList());
+                .filter(user -> !user.id.equals(activeId)).map(user -> user.id).collect(Collectors.toList());
         if (members.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Select at least one other online user. Hold Ctrl to select more.");
             return;
@@ -424,7 +451,7 @@ public class ChatWindow extends JFrame {
             return;
         }
         output.println("@group-create:" + encode(name) + ":"
-                + members.stream().map(ChatWindow::encode).collect(Collectors.joining(",")));
+                + String.join(",", members));
     }
 
     private static String encode(String text) {
@@ -457,27 +484,30 @@ public class ChatWindow extends JFrame {
     }
 
     // 每位對象有獨立的文字區；收到私訊時也會自動建立分頁。
-    private JTextArea privateChat(String peer) {
-        return privateChats.computeIfAbsent(peer, name -> {
+    private PrivateChat privateChat(String peerId, String peerName) {
+        return privateChats.computeIfAbsent(peerId, id -> {
             JTextArea area = new JTextArea();
             area.setEditable(false);
             area.setLineWrap(true);
             area.setWrapStyleWord(true);
-            chats.addTab(name, new JScrollPane(area));
-            return area;
+            JScrollPane pane = new JScrollPane(area);
+            chats.addTab(peerName, pane);
+            return new PrivateChat(peerName, area, pane);
         });
     }
 
     private void receivePrivate(String message) {
-        String[] parts = message.substring(4).split(":", 2);
-        if (parts.length != 2)
+        String[] parts = message.substring(4).split(":", 3);
+        if (parts.length != 3)
             return;
         try {
-            String peer = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8);
-            String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
-            JTextArea area = privateChat(peer);
-            area.append(text + "\n");
-            area.setCaretPosition(area.getDocument().getLength());
+            String peer = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
+            PrivateChat chat = privateChats.get(parts[0]);
+            if (chat == null && !peer.isEmpty()) chat = privateChat(parts[0], peer);
+            if (chat == null) { appendMessage(text); return; }
+            chat.area.append(text + "\n");
+            chat.area.setCaretPosition(chat.area.getDocument().getLength());
         } catch (IllegalArgumentException exception) {
             appendMessage("Received an invalid private message.");
         }
@@ -489,6 +519,7 @@ public class ChatWindow extends JFrame {
             return;
         }
         observing = true;
+        activeId = null;
         output.println("@leave");
         clearGroupChats();
         setConnected(false);
@@ -503,6 +534,7 @@ public class ChatWindow extends JFrame {
             connecting = false;
             joining = false;
             observing = false;
+            activeId = null;
             onlineUsers.clear();
             setConnected(false);
             if (isDisplayable()) {
@@ -519,6 +551,7 @@ public class ChatWindow extends JFrame {
         connecting = false;
         joining = false;
         observing = false;
+        activeId = null;
         onlineUsers.clear();
         setConnected(false);
         closeSocket(oldSocket);
@@ -572,12 +605,16 @@ public class ChatWindow extends JFrame {
 
     // 伺服器每次傳送完整名單，以最新名單取代舊內容。
     private void updateOnlineUsers(String encodedNames) {
-        List<String> selected = usersList.getSelectedValuesList();
+        List<OnlineUser> selected = usersList.getSelectedValuesList();
         onlineUsers.clear();
         if (!encodedNames.isEmpty()) {
             for (String encoded : encodedNames.split(",")) {
                 try {
-                    onlineUsers.addElement(new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8));
+                    String[] parts = encoded.split("=", 2);
+                    if (parts.length != 2) throw new IllegalArgumentException();
+                    java.util.UUID.fromString(parts[0]);
+                    onlineUsers.addElement(new OnlineUser(parts[0],
+                            new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8)));
                 } catch (IllegalArgumentException exception) {
                     appendMessage("Received an invalid online user list.");
                     onlineUsers.clear();
@@ -587,6 +624,12 @@ public class ChatWindow extends JFrame {
         }
         int[] indexes = selected.stream().mapToInt(onlineUsers::indexOf).filter(index -> index >= 0).toArray();
         usersList.setSelectedIndices(indexes);
+        for (Map.Entry<String, PrivateChat> entry : privateChats.entrySet()) {
+            boolean online = java.util.Collections.list(onlineUsers.elements()).stream()
+                    .anyMatch(user -> user.id.equals(entry.getKey()));
+            int tab = chats.indexOfComponent(entry.getValue().pane);
+            if (tab >= 0) chats.setTitleAt(tab, entry.getValue().name + (online ? "" : " (offline)"));
+        }
     }
 
     public static void main(String[] args) {

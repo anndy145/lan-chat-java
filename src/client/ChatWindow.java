@@ -54,6 +54,8 @@ public class ChatWindow extends JFrame {
     private final JTabbedPane chats = new JTabbedPane();
     private final Map<String, PrivateChat> privateChats = new LinkedHashMap<>();
     private final Map<String, JScrollPane> groupChats = new LinkedHashMap<>();
+    private final Map<Component, String> tabNames = new LinkedHashMap<>();
+    private final Map<Component, Integer> unreadCounts = new LinkedHashMap<>();
     private String activeName;
     private String activeId;
 
@@ -109,6 +111,7 @@ public class ChatWindow extends JFrame {
         chatArea.setLineWrap(true);
         chatArea.setWrapStyleWord(true);
         chats.addTab("Lobby", new JScrollPane(chatArea));
+        chats.addChangeListener(event -> clearUnread(chats.getSelectedComponent()));
         setButtonIcon(sendButton, "/buttons/send.png", "Send");
         setButtonIcon(leaveButton, "/buttons/leave.png", "Leave");
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
@@ -473,11 +476,12 @@ public class ChatWindow extends JFrame {
                 area.setWrapStyleWord(true);
                 pane = new JScrollPane(area);
                 groupChats.put(parts[0], pane);
-                chats.addTab("Group: " + name, pane);
+                addChatTab("Group: " + name, pane);
             }
             JTextArea area = (JTextArea) pane.getViewport().getView();
             area.append(text + "\n");
             area.setCaretPosition(area.getDocument().getLength());
+            markUnread(pane);
         } catch (IllegalArgumentException exception) {
             appendMessage("Received an invalid group message.");
         }
@@ -491,7 +495,7 @@ public class ChatWindow extends JFrame {
             area.setLineWrap(true);
             area.setWrapStyleWord(true);
             JScrollPane pane = new JScrollPane(area);
-            chats.addTab(peerName, pane);
+            addChatTab(peerName, pane);
             return new PrivateChat(peerName, area, pane);
         });
     }
@@ -508,6 +512,7 @@ public class ChatWindow extends JFrame {
             if (chat == null) { appendMessage(text); return; }
             chat.area.append(text + "\n");
             chat.area.setCaretPosition(chat.area.getDocument().getLength());
+            markUnread(chat.pane);
         } catch (IllegalArgumentException exception) {
             appendMessage("Received an invalid private message.");
         }
@@ -562,12 +567,45 @@ public class ChatWindow extends JFrame {
             chats.removeTabAt(1);
         privateChats.clear();
         groupChats.clear();
+        tabNames.clear();
+        unreadCounts.clear();
     }
 
     private void clearGroupChats() {
-        for (JScrollPane pane : groupChats.values())
+        for (JScrollPane pane : groupChats.values()) {
+            tabNames.remove(pane);
+            unreadCounts.remove(pane);
             chats.remove(pane);
+        }
         groupChats.clear();
+    }
+
+    private void addChatTab(String name, JScrollPane pane) {
+        tabNames.put(pane, name);
+        chats.addTab(name, pane);
+    }
+
+    // 未選取的分頁收到訊息時累計；選取該分頁後歸零。
+    private void markUnread(Component pane) {
+        if (pane != chats.getSelectedComponent()) {
+            unreadCounts.merge(pane, 1, Integer::sum);
+            refreshTabTitle(pane);
+        }
+    }
+
+    private void clearUnread(Component pane) {
+        if (pane != null && unreadCounts.remove(pane) != null) {
+            refreshTabTitle(pane);
+        }
+    }
+
+    private void refreshTabTitle(Component pane) {
+        int index = chats.indexOfComponent(pane);
+        String name = tabNames.get(pane);
+        if (index >= 0 && name != null) {
+            int count = unreadCounts.getOrDefault(pane, 0);
+            chats.setTitleAt(index, count == 0 ? name : name + " (" + count + ")");
+        }
     }
 
     private static void closeSocket(Socket socket) {
@@ -627,8 +665,9 @@ public class ChatWindow extends JFrame {
         for (Map.Entry<String, PrivateChat> entry : privateChats.entrySet()) {
             boolean online = java.util.Collections.list(onlineUsers.elements()).stream()
                     .anyMatch(user -> user.id.equals(entry.getKey()));
-            int tab = chats.indexOfComponent(entry.getValue().pane);
-            if (tab >= 0) chats.setTitleAt(tab, entry.getValue().name + (online ? "" : " (offline)"));
+            JScrollPane pane = entry.getValue().pane;
+            tabNames.put(pane, entry.getValue().name + (online ? "" : " (offline)"));
+            refreshTabTitle(pane);
         }
     }
 

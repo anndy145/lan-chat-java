@@ -96,20 +96,37 @@ public class ChatWindow extends JFrame {
     private static final class OnlineUser {
         final String id;
         final String name;
-        OnlineUser(String id, String name) { this.id = id; this.name = name; }
-        @Override public String toString() { return name; }
-        @Override public boolean equals(Object other) {
+
+        OnlineUser(String id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+
+        @Override
+        public boolean equals(Object other) {
             return other instanceof OnlineUser && id.equals(((OnlineUser) other).id);
         }
-        @Override public int hashCode() { return id.hashCode(); }
+
+        @Override
+        public int hashCode() {
+            return id.hashCode();
+        }
     }
 
     private static final class PrivateChat {
         final String name;
         final JTextArea area;
         final JScrollPane pane;
+
         PrivateChat(String name, JTextArea area, JScrollPane pane) {
-            this.name = name; this.area = area; this.pane = pane;
+            this.name = name;
+            this.area = area;
+            this.pane = pane;
         }
     }
 
@@ -129,7 +146,8 @@ public class ChatWindow extends JFrame {
         setSize(760, 450);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        for (String key : THEME_KEYS) lightThemeDefaults.put(key, UIManager.get(key));
+        for (String key : THEME_KEYS)
+            lightThemeDefaults.put(key, UIManager.get(key));
 
         // 上方放連線資料；中間顯示訊息，下方讓使用者輸入。
         JPanel connectionPanel = new JPanel(new GridBagLayout());
@@ -178,7 +196,8 @@ public class ChatWindow extends JFrame {
         buttonsPanel.add(sendButton);
         buttonsPanel.add(leaveButton);
         inputPanel.add(buttonsPanel, BorderLayout.EAST);
-        int buttonWidth = Math.max(Math.max(hostButton.getPreferredSize().width, viewUsersButton.getPreferredSize().width),
+        int buttonWidth = Math.max(
+                Math.max(hostButton.getPreferredSize().width, viewUsersButton.getPreferredSize().width),
                 Math.max(privateButton.getPreferredSize().width, createGroupButton.getPreferredSize().width));
         hostButton.setPreferredSize(new java.awt.Dimension(buttonWidth, hostButton.getPreferredSize().height));
         themeButton.setPreferredSize(new java.awt.Dimension(buttonWidth, themeButton.getPreferredSize().height));
@@ -192,7 +211,8 @@ public class ChatWindow extends JFrame {
         usersPanel.add(usersHeader, BorderLayout.NORTH);
         // 根據實際 Lobby 分頁尺寸調整右側按鈕，兼顧字型與縮放。
         chats.addComponentListener(new ComponentAdapter() {
-            @Override public void componentResized(ComponentEvent event) {
+            @Override
+            public void componentResized(ComponentEvent event) {
                 alignUsersButton(usersHeader);
             }
         });
@@ -204,7 +224,8 @@ public class ChatWindow extends JFrame {
             @Override
             public void mouseClicked(MouseEvent event) {
                 if (event.getClickCount() != 2 || !SwingUtilities.isLeftMouseButton(event)
-                        || !privateButton.isEnabled()) return;
+                        || !privateButton.isEnabled())
+                    return;
                 int index = usersList.locationToIndex(event.getPoint());
                 if (index >= 0 && usersList.getCellBounds(index, index).contains(event.getPoint())) {
                     openPrivateChat(onlineUsers.get(index));
@@ -280,9 +301,11 @@ public class ChatWindow extends JFrame {
     }
 
     private void alignUsersButton(JPanel header) {
-        if (chats.getWidth() <= 0 || chats.getTabCount() == 0) return;
+        if (chats.getWidth() <= 0 || chats.getTabCount() == 0)
+            return;
         java.awt.Rectangle lobby = chats.getBoundsAt(0);
-        if (lobby == null || lobby.height <= 0) return;
+        if (lobby == null || lobby.height <= 0)
+            return;
         int top = Math.max(0, lobby.y);
         int height = top + lobby.height;
         if (header.getPreferredSize().height != height || header.getInsets().top != top) {
@@ -396,29 +419,34 @@ public class ChatWindow extends JFrame {
             ColorUIResource focus = new ColorUIResource(45, 136, 255);
             // Metal 預設的淺色漸層會讓白字按鈕看不清楚。
             UIManager.put("Button.gradient", java.util.List.of(0f, 0f, button, button, button));
-            for (String key : new String[]{"control", "Panel.background", "OptionPane.background", "ScrollPane.background",
-                    "Viewport.background", "TabbedPane.background", "TabbedPane.contentAreaColor", "nimbusBlueGrey"}) {
+            for (String key : new String[] { "control", "Panel.background", "OptionPane.background",
+                    "ScrollPane.background",
+                    "Viewport.background", "TabbedPane.background", "TabbedPane.contentAreaColor", "nimbusBlueGrey" }) {
                 UIManager.put(key, background);
             }
             UIManager.put("Button.background", button);
-            for (String key : new String[]{"TabbedPane.selected", "TabbedPane.unselectedBackground",
-                    "info", "ToolTip.background", "nimbusBase"}) UIManager.put(key, surface);
-            for (String key : new String[]{"text", "TextField.background", "TextField.inactiveBackground",
-                    "TextArea.background", "List.background", "nimbusLightBackground"}) UIManager.put(key, input);
-            for (String key : new String[]{"Label.foreground", "Button.foreground", "TextField.foreground",
+            for (String key : new String[] { "TabbedPane.selected", "TabbedPane.unselectedBackground",
+                    "info", "ToolTip.background", "nimbusBase" })
+                UIManager.put(key, surface);
+            for (String key : new String[] { "text", "TextField.background", "TextField.inactiveBackground",
+                    "TextArea.background", "List.background", "nimbusLightBackground" })
+                UIManager.put(key, input);
+            for (String key : new String[] { "Label.foreground", "Button.foreground", "TextField.foreground",
                     "TextField.caretForeground", "TextArea.foreground", "TextArea.caretForeground", "List.foreground",
                     "TabbedPane.foreground", "OptionPane.messageForeground", "ToolTip.foreground",
-                    "TextField.selectionForeground", "TextArea.selectionForeground", "List.selectionForeground"}) {
+                    "TextField.selectionForeground", "TextArea.selectionForeground", "List.selectionForeground" }) {
                 UIManager.put(key, text);
             }
-            for (String key : new String[]{"Button.disabledText", "TextField.inactiveForeground"}) UIManager.put(key, disabled);
-            for (String key : new String[]{"TextField.selectionBackground", "TextArea.selectionBackground",
-                    "List.selectionBackground", "Button.select"}) {
+            for (String key : new String[] { "Button.disabledText", "TextField.inactiveForeground" })
+                UIManager.put(key, disabled);
+            for (String key : new String[] { "TextField.selectionBackground", "TextArea.selectionBackground",
+                    "List.selectionBackground", "Button.select" }) {
                 UIManager.put(key, selected);
             }
             UIManager.put("Button.focus", focus);
             UIManager.put("TabbedPane.focus", focus);
-            for (String key : new String[]{"TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow", "TabbedPane.darkShadow"}) {
+            for (String key : new String[] { "TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow",
+                    "TabbedPane.darkShadow" }) {
                 UIManager.put(key, surface);
             }
         } else {
@@ -426,8 +454,10 @@ public class ChatWindow extends JFrame {
         }
         SwingUtilities.updateComponentTreeUI(this);
         // 已隱藏的分頁不在視窗元件樹內，也必須一起更新。
-        for (PrivateChat chat : privateChats.values()) SwingUtilities.updateComponentTreeUI(chat.pane);
-        for (JScrollPane pane : groupChats.values()) SwingUtilities.updateComponentTreeUI(pane);
+        for (PrivateChat chat : privateChats.values())
+            SwingUtilities.updateComponentTreeUI(chat.pane);
+        for (JScrollPane pane : groupChats.values())
+            SwingUtilities.updateComponentTreeUI(pane);
         setButtonIcon(sendButton, "/buttons/send.png", "Send");
         setButtonIcon(leaveButton, "/buttons/leave.png", "Leave");
         themeButton.setText(darkMode ? "Light mode" : "Dark mode");
@@ -702,9 +732,14 @@ public class ChatWindow extends JFrame {
             String peer = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
             PrivateChat chat = privateChats.get(parts[0]);
-            if (chat != null) chat = privateChat(parts[0], chat.name);
-            else if (!peer.isEmpty()) chat = privateChat(parts[0], peer);
-            if (chat == null) { appendMessage(text); return; }
+            if (chat != null)
+                chat = privateChat(parts[0], chat.name);
+            else if (!peer.isEmpty())
+                chat = privateChat(parts[0], peer);
+            if (chat == null) {
+                appendMessage(text);
+                return;
+            }
             chat.area.append(text + "\n");
             chat.area.setCaretPosition(chat.area.getDocument().getLength());
             markUnread(chat.pane);
@@ -822,7 +857,8 @@ public class ChatWindow extends JFrame {
             String title = count == 0 ? name : name + " (" + count + ")";
             chats.setTitleAt(index, title);
             JLabel label = tabLabels.get(pane);
-            if (label != null) label.setText(title);
+            if (label != null)
+                label.setText(title);
         }
     }
 
@@ -868,7 +904,8 @@ public class ChatWindow extends JFrame {
             for (String encoded : encodedNames.split(",")) {
                 try {
                     String[] parts = encoded.split("=", 2);
-                    if (parts.length != 2) throw new IllegalArgumentException();
+                    if (parts.length != 2)
+                        throw new IllegalArgumentException();
                     java.util.UUID.fromString(parts[0]);
                     onlineUsers.addElement(new OnlineUser(parts[0],
                             new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8)));

@@ -3,12 +3,16 @@ package client;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.GridLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Image;
 import java.awt.Insets;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -23,6 +27,7 @@ import java.util.Map;
 import javax.swing.DefaultListModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
+import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -96,20 +101,42 @@ public class ChatWindow extends JFrame {
 
     public ChatWindow() {
         super("Chat Room");
-        setSize(600, 450);
+        setSize(760, 450);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         // 上方放連線資料；中間顯示訊息，下方讓使用者輸入。
-        JPanel connectionPanel = new JPanel(new GridLayout(2, 4, 5, 5));
-        connectionPanel.add(new JLabel("Server IP"));
-        connectionPanel.add(new JLabel("Port"));
-        connectionPanel.add(new JLabel("Name"));
-        connectionPanel.add(new JLabel(""));
-        connectionPanel.add(hostField);
-        connectionPanel.add(portField);
-        connectionPanel.add(nameField);
-        connectionPanel.add(connectButton);
+        JPanel connectionPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.insets = new Insets(2, 3, 2, 3);
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.gridy = 0;
+        constraints.gridx = 0;
+        connectionPanel.add(new JLabel("Server IP"), constraints);
+        constraints.gridx = 1;
+        connectionPanel.add(new JLabel("Port"), constraints);
+        constraints.gridx = 2;
+        connectionPanel.add(new JLabel("Name"), constraints);
+
+        constraints.gridy = 1;
+        constraints.fill = GridBagConstraints.BOTH;
+        constraints.gridx = 0;
+        constraints.weightx = 0;
+        hostField.setColumns(10);
+        connectionPanel.add(hostField, constraints);
+        constraints.gridx = 1;
+        constraints.weightx = 0;
+        portField.setColumns(5);
+        connectionPanel.add(portField, constraints);
+        constraints.gridx = 2;
+        constraints.weightx = 1;
+        nameField.setColumns(4);
+        connectionPanel.add(nameField, constraints);
+        constraints.gridx = 3;
+        constraints.weightx = 0;
+        connectionPanel.add(connectButton, constraints);
+        constraints.gridx = 4;
+        connectionPanel.add(hostButton, constraints);
 
         chatArea.setEditable(false);
         chatArea.setLineWrap(true);
@@ -124,16 +151,23 @@ public class ChatWindow extends JFrame {
         buttonsPanel.add(sendButton);
         buttonsPanel.add(leaveButton);
         inputPanel.add(buttonsPanel, BorderLayout.EAST);
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.add(connectionPanel, BorderLayout.CENTER);
-        topPanel.add(hostButton, BorderLayout.SOUTH);
-        add(topPanel, BorderLayout.NORTH);
+        int sidebarWidth = Math.max(viewUsersButton.getPreferredSize().width + 6,
+                Math.max(privateButton.getPreferredSize().width, createGroupButton.getPreferredSize().width));
+        add(connectionPanel, BorderLayout.NORTH);
         add(chats, BorderLayout.CENTER);
         JPanel usersPanel = new JPanel(new BorderLayout());
+        usersPanel.setPreferredSize(new java.awt.Dimension(sidebarWidth, 0));
         JPanel usersHeader = new JPanel(new BorderLayout());
-        usersHeader.add(new JLabel("Online users"), BorderLayout.NORTH);
-        usersHeader.add(viewUsersButton, BorderLayout.SOUTH);
+        usersHeader.add(viewUsersButton, BorderLayout.CENTER);
         usersPanel.add(usersHeader, BorderLayout.NORTH);
+        // 根據實際 Lobby 分頁尺寸調整右側按鈕，兼顧字型與縮放。
+        chats.addComponentListener(new ComponentAdapter() {
+            @Override public void componentResized(ComponentEvent event) {
+                alignUsersButton(usersHeader);
+            }
+        });
+        chats.addChangeListener(event -> SwingUtilities.invokeLater(() -> alignUsersButton(usersHeader)));
+        SwingUtilities.invokeLater(() -> alignUsersButton(usersHeader));
         JScrollPane usersScroll = new JScrollPane(usersList);
         usersList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         usersList.addMouseListener(new MouseAdapter() {
@@ -210,6 +244,19 @@ public class ChatWindow extends JFrame {
                 stopTemporaryServer();
             }
         });
+    }
+
+    private void alignUsersButton(JPanel header) {
+        if (chats.getWidth() <= 0 || chats.getTabCount() == 0) return;
+        java.awt.Rectangle lobby = chats.getBoundsAt(0);
+        if (lobby == null || lobby.height <= 0) return;
+        int top = Math.max(0, lobby.y);
+        int height = top + lobby.height;
+        if (header.getPreferredSize().height != height || header.getInsets().top != top) {
+            header.setBorder(BorderFactory.createEmptyBorder(top, 0, 0, 0));
+            header.setPreferredSize(new java.awt.Dimension(0, height));
+            header.revalidate();
+        }
     }
 
     private void startTemporaryServer() {

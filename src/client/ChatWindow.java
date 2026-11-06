@@ -64,6 +64,7 @@ public class ChatWindow extends JFrame {
     private final JButton leaveButton = new JButton("Leave");
     private final JButton privateButton = new JButton("Open private chat");
     private final JButton createGroupButton = new JButton("Create group");
+    private final JButton addMembersButton = new JButton("Add members");
     private final DefaultListModel<OnlineUser> onlineUsers = new DefaultListModel<>();
     private final JList<OnlineUser> usersList = new JList<>(onlineUsers);
     private final JTabbedPane chats = new JTabbedPane();
@@ -225,9 +226,10 @@ public class ChatWindow extends JFrame {
         });
         usersScroll.setPreferredSize(new java.awt.Dimension(140, 0));
         usersPanel.add(usersScroll, BorderLayout.CENTER);
-        JPanel userButtons = new JPanel(new GridLayout(2, 1));
+        JPanel userButtons = new JPanel(new GridLayout(3, 1));
         userButtons.add(privateButton);
         userButtons.add(createGroupButton);
+        userButtons.add(addMembersButton);
         usersPanel.add(userButtons, BorderLayout.SOUTH);
         add(usersPanel, BorderLayout.EAST);
         add(inputPanel, BorderLayout.SOUTH);
@@ -265,6 +267,7 @@ public class ChatWindow extends JFrame {
         themeButton.addActionListener(event -> toggleTheme());
         privateButton.addActionListener(event -> openSelectedChat());
         createGroupButton.addActionListener(event -> createGroup());
+        addMembersButton.addActionListener(event -> addGroupMembers());
         leaveButton.addActionListener(event -> leaveChat());
         inputField.addActionListener(event -> sendMessage());
         addWindowListener(new WindowAdapter() {
@@ -526,6 +529,13 @@ public class ChatWindow extends JFrame {
                                 receivePrivate(received);
                             } else if (received.startsWith("@group:") && !observing) {
                                 receiveGroup(received);
+                            } else if (received.startsWith("@group-error:")) {
+                                try {
+                                    JOptionPane.showMessageDialog(this, new String(Base64.getDecoder().decode(
+                                            received.substring(13)), StandardCharsets.UTF_8));
+                                } catch (IllegalArgumentException exception) {
+                                    appendMessage("Received an invalid notification.");
+                                }
                             } else if (received.startsWith("@notice:")) {
                                 try {
                                     appendMessage(new String(Base64.getDecoder().decode(received.substring(8)),
@@ -616,6 +626,23 @@ public class ChatWindow extends JFrame {
         }
         output.println("@group-create:" + encode(name) + ":"
                 + String.join(",", members));
+    }
+
+    private void addGroupMembers() {
+        String groupId = groupChats.entrySet().stream()
+                .filter(entry -> entry.getValue() == chats.getSelectedComponent())
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+        if (groupId == null) {
+            JOptionPane.showMessageDialog(this, "Select a group tab first.");
+            return;
+        }
+        List<String> members = usersList.getSelectedValuesList().stream()
+                .filter(user -> !user.id.equals(activeId)).map(user -> user.id).collect(Collectors.toList());
+        if (members.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Select at least one other online user. Hold Ctrl to select more.");
+            return;
+        }
+        output.println("@group-add:" + groupId + ":" + String.join(",", members));
     }
 
     private static String encode(String text) {
@@ -824,6 +851,7 @@ public class ChatWindow extends JFrame {
         sendButton.setEnabled(connected);
         privateButton.setEnabled(connected);
         createGroupButton.setEnabled(connected);
+        addMembersButton.setEnabled(connected);
         leaveButton.setEnabled(connected);
     }
 

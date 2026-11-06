@@ -103,6 +103,13 @@ class ClientSession implements Runnable {
                     } catch (IllegalArgumentException exception) {
                         send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
                     }
+                } else if (line.startsWith("@group-add:") && isActive()) {
+                    String[] parts = line.substring(11).split(":", 2);
+                    if (parts.length == 2 && !parts[1].isEmpty()) {
+                        server.addGroupMembers(this, parts[0], parts[1].split(",", -1));
+                    } else {
+                        send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
+                    }
                 } else if (line.startsWith("@group-send:") && isActive()) {
                     String[] parts = line.substring(12).split(":", 2);
                     try {

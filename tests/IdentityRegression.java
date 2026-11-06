@@ -92,6 +92,33 @@ public class IdentityRegression {
                 alice.output.println("@group-send:" + groupId + ":" + encode("group-test"));
                 bob.until("@group:" + groupId + ":");
 
+                try (Peer charlie = new Peer(port, "Charlie"); Peer dave = new Peer(port, "Dave")) {
+                    String charlieId = charlie.until("@joined:").substring(8);
+                    String daveId = dave.until("@joined:").substring(8);
+                    charlie.output.println("@group-add:" + groupId + ":" + daveId);
+                    if (!new String(Base64.getDecoder().decode(charlie.until("@group-error:").substring(13)), StandardCharsets.UTF_8)
+                            .contains("no longer a member")) throw new AssertionError("Non-member could invite");
+                    alice.output.println("@group-add:" + groupId + ":" + charlieId + ",missing-id");
+                    alice.until("@group-error:");
+                    alice.output.println("@group-send:" + groupId + ":" + encode("before-invite"));
+                    alice.until("@group:" + groupId + ":");
+                    bob.until("@group:" + groupId + ":");
+                    alice.output.println("@group-add:" + groupId + ":" + charlieId);
+                    String invitation = charlie.until("@group:" + groupId + ":");
+                    if (!messageText(invitation).contains("added Charlie")) {
+                        throw new AssertionError("New member received a message from before joining");
+                    }
+                    alice.until("@group:" + groupId + ":");
+                    bob.until("@group:" + groupId + ":");
+                    alice.output.println("@group-send:" + groupId + ":" + encode("after-invite"));
+                    if (!messageText(charlie.until("@group:" + groupId + ":")).endsWith("Alice: after-invite")) {
+                        throw new AssertionError("New member did not receive later message");
+                    }
+                    alice.output.println("@group-add:" + groupId + ":" + charlieId);
+                    if (!new String(Base64.getDecoder().decode(alice.until("@group-error:").substring(13)), StandardCharsets.UTF_8)
+                            .contains("already in this group")) throw new AssertionError("Duplicate invite not reported");
+                }
+
                 bob.output.println("@leave");
                 while (alice.until("@users:").contains(newBob)) { }
                 try (Peer replacement = new Peer(port, "Bob")) {

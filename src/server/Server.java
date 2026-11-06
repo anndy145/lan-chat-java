@@ -234,6 +234,33 @@ public class Server implements AutoCloseable {
         members.forEach(member -> member.send(announcement));
     }
 
+    public synchronized void addGroupMembers(ClientSession inviter, String id, String[] requestedMembers) {
+        ChatGroup group = groups.get(id);
+        if (!inviter.isActive() || group == null || !group.members.contains(inviter)) {
+            inviter.send("@group-error:" + encode("You are no longer a member of this group."));
+            return;
+        }
+        Set<ClientSession> additions = new LinkedHashSet<>();
+        for (String requested : requestedMembers) {
+            ClientSession match = clients.stream().filter(ClientSession::isActive)
+                    .filter(client -> client.getUserId().equals(requested)).findFirst().orElse(null);
+            if (match == null) {
+                inviter.send("@group-error:" + encode("A selected user is no longer online."));
+                return;
+            }
+            if (!group.members.contains(match)) additions.add(match);
+        }
+        if (additions.isEmpty()) {
+            inviter.send("@group-error:" + encode("The selected users are already in this group."));
+            return;
+        }
+        group.members.addAll(additions);
+        String names = additions.stream().map(ClientSession::getName).collect(Collectors.joining(", "));
+        String announcement = "@group:" + id + ":" + encode(group.name) + ":"
+                + encode(inviter.getName() + " added " + names + " to the group.");
+        group.members.forEach(member -> member.send(announcement));
+    }
+
     public synchronized void sendGroup(ClientSession sender, String id, String text) {
         ChatGroup group = groups.get(id);
         if (!sender.isActive() || group == null || !group.members.contains(sender)) {

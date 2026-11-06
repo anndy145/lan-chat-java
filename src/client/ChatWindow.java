@@ -1,12 +1,16 @@
 package client;
 
 import java.awt.BorderLayout;
+import java.awt.AlphaComposite;
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Image;
 import java.awt.Insets;
+import java.awt.image.BufferedImage;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.MouseAdapter;
@@ -39,6 +43,8 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.plaf.ColorUIResource;
 import javax.swing.ListSelectionModel;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -51,6 +57,7 @@ public class ChatWindow extends JFrame {
     private final JButton connectButton = new JButton("Connect");
     private final JButton viewUsersButton = new JButton("View online users");
     private final JButton hostButton = new JButton("Start temporary server");
+    private final JButton themeButton = new JButton("Dark mode");
     private final JTextArea chatArea = new JTextArea();
     private final JTextField inputField = new JTextField();
     private final JButton sendButton = new JButton("Send");
@@ -67,6 +74,23 @@ public class ChatWindow extends JFrame {
     private final Map<Component, JLabel> tabLabels = new LinkedHashMap<>();
     private String activeName;
     private String activeId;
+    private boolean darkMode;
+    private final Map<String, Object> lightThemeDefaults = new LinkedHashMap<>();
+
+    private static final String[] THEME_KEYS = {
+            "control", "info", "text", "nimbusBase", "nimbusBlueGrey", "nimbusLightBackground",
+            "Panel.background", "Label.foreground", "Button.background", "Button.foreground",
+            "Button.select", "Button.disabledText", "Button.focus", "Button.gradient", "TextField.background",
+            "TextField.foreground", "TextField.inactiveBackground", "TextField.inactiveForeground",
+            "TextField.caretForeground", "TextField.selectionBackground", "TextField.selectionForeground",
+            "TextArea.background", "TextArea.foreground", "TextArea.caretForeground",
+            "TextArea.selectionBackground", "TextArea.selectionForeground", "List.background", "List.foreground",
+            "List.selectionBackground", "List.selectionForeground", "TabbedPane.background", "TabbedPane.foreground",
+            "TabbedPane.selected", "TabbedPane.contentAreaColor", "TabbedPane.unselectedBackground",
+            "TabbedPane.focus", "TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow",
+            "TabbedPane.darkShadow", "ScrollPane.background", "Viewport.background", "OptionPane.background",
+            "OptionPane.messageForeground", "ToolTip.background", "ToolTip.foreground"
+    };
 
     private static final class OnlineUser {
         final String id;
@@ -104,6 +128,7 @@ public class ChatWindow extends JFrame {
         setSize(760, 450);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        for (String key : THEME_KEYS) lightThemeDefaults.put(key, UIManager.get(key));
 
         // 上方放連線資料；中間顯示訊息，下方讓使用者輸入。
         JPanel connectionPanel = new JPanel(new GridBagLayout());
@@ -117,7 +142,8 @@ public class ChatWindow extends JFrame {
         connectionPanel.add(new JLabel("Port"), constraints);
         constraints.gridx = 2;
         connectionPanel.add(new JLabel("Name"), constraints);
-
+        constraints.gridx = 4;
+        connectionPanel.add(themeButton, constraints);
         constraints.gridy = 1;
         constraints.fill = GridBagConstraints.BOTH;
         constraints.gridx = 0;
@@ -151,8 +177,11 @@ public class ChatWindow extends JFrame {
         buttonsPanel.add(sendButton);
         buttonsPanel.add(leaveButton);
         inputPanel.add(buttonsPanel, BorderLayout.EAST);
-        int sidebarWidth = Math.max(viewUsersButton.getPreferredSize().width + 6,
+        int buttonWidth = Math.max(Math.max(hostButton.getPreferredSize().width, viewUsersButton.getPreferredSize().width),
                 Math.max(privateButton.getPreferredSize().width, createGroupButton.getPreferredSize().width));
+        hostButton.setPreferredSize(new java.awt.Dimension(buttonWidth, hostButton.getPreferredSize().height));
+        themeButton.setPreferredSize(new java.awt.Dimension(buttonWidth, themeButton.getPreferredSize().height));
+        int sidebarWidth = buttonWidth;
         add(connectionPanel, BorderLayout.NORTH);
         add(chats, BorderLayout.CENTER);
         JPanel usersPanel = new JPanel(new BorderLayout());
@@ -233,6 +262,7 @@ public class ChatWindow extends JFrame {
                 startTemporaryServer();
         });
         sendButton.addActionListener(event -> sendMessage());
+        themeButton.addActionListener(event -> toggleTheme());
         privateButton.addActionListener(event -> openSelectedChat());
         createGroupButton.addActionListener(event -> createGroup());
         leaveButton.addActionListener(event -> leaveChat());
@@ -329,12 +359,77 @@ public class ChatWindow extends JFrame {
     private void setButtonIcon(JButton button, String path, String description) {
         java.net.URL resource = ChatWindow.class.getResource(path);
         if (resource != null) {
-            Image image = new ImageIcon(resource).getImage().getScaledInstance(24, 24, Image.SCALE_SMOOTH);
+            Image source = new ImageIcon(resource).getImage();
+            BufferedImage image = new BufferedImage(24, 24, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = image.createGraphics();
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                    java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(source, 0, 0, 24, 24, null);
+            if (darkMode) {
+                graphics.setComposite(AlphaComposite.SrcIn);
+                graphics.setColor(new Color(228, 230, 235));
+                graphics.fillRect(0, 0, 24, 24);
+            }
+            graphics.dispose();
             button.setIcon(new ImageIcon(image));
             button.setText("");
         }
         button.setToolTipText(description);
         button.getAccessibleContext().setAccessibleName(description);
+    }
+
+    // 只變更介面顏色，不改變聊天室資料或連線狀態。
+    private void toggleTheme() {
+        darkMode = !darkMode;
+        if (darkMode) {
+            // 參考 Facebook 深色介面的灰黑層次與藍色強調色。
+            ColorUIResource background = new ColorUIResource(24, 25, 26);
+            ColorUIResource surface = new ColorUIResource(36, 37, 38);
+            ColorUIResource button = new ColorUIResource(58, 59, 60);
+            ColorUIResource input = new ColorUIResource(36, 37, 38);
+            ColorUIResource text = new ColorUIResource(228, 230, 235);
+            ColorUIResource disabled = new ColorUIResource(176, 179, 184);
+            ColorUIResource selected = new ColorUIResource(29, 84, 142);
+            ColorUIResource focus = new ColorUIResource(45, 136, 255);
+            // Metal 預設的淺色漸層會讓白字按鈕看不清楚。
+            UIManager.put("Button.gradient", java.util.List.of(0f, 0f, button, button, button));
+            for (String key : new String[]{"control", "Panel.background", "OptionPane.background", "ScrollPane.background",
+                    "Viewport.background", "TabbedPane.background", "TabbedPane.contentAreaColor", "nimbusBlueGrey"}) {
+                UIManager.put(key, background);
+            }
+            UIManager.put("Button.background", button);
+            for (String key : new String[]{"TabbedPane.selected", "TabbedPane.unselectedBackground",
+                    "info", "ToolTip.background", "nimbusBase"}) UIManager.put(key, surface);
+            for (String key : new String[]{"text", "TextField.background", "TextField.inactiveBackground",
+                    "TextArea.background", "List.background", "nimbusLightBackground"}) UIManager.put(key, input);
+            for (String key : new String[]{"Label.foreground", "Button.foreground", "TextField.foreground",
+                    "TextField.caretForeground", "TextArea.foreground", "TextArea.caretForeground", "List.foreground",
+                    "TabbedPane.foreground", "OptionPane.messageForeground", "ToolTip.foreground",
+                    "TextField.selectionForeground", "TextArea.selectionForeground", "List.selectionForeground"}) {
+                UIManager.put(key, text);
+            }
+            for (String key : new String[]{"Button.disabledText", "TextField.inactiveForeground"}) UIManager.put(key, disabled);
+            for (String key : new String[]{"TextField.selectionBackground", "TextArea.selectionBackground",
+                    "List.selectionBackground", "Button.select"}) {
+                UIManager.put(key, selected);
+            }
+            UIManager.put("Button.focus", focus);
+            UIManager.put("TabbedPane.focus", focus);
+            for (String key : new String[]{"TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow", "TabbedPane.darkShadow"}) {
+                UIManager.put(key, surface);
+            }
+        } else {
+            lightThemeDefaults.forEach(UIManager::put);
+        }
+        SwingUtilities.updateComponentTreeUI(this);
+        // 已隱藏的分頁不在視窗元件樹內，也必須一起更新。
+        for (PrivateChat chat : privateChats.values()) SwingUtilities.updateComponentTreeUI(chat.pane);
+        for (JScrollPane pane : groupChats.values()) SwingUtilities.updateComponentTreeUI(pane);
+        setButtonIcon(sendButton, "/buttons/send.png", "Send");
+        setButtonIcon(leaveButton, "/buttons/leave.png", "Leave");
+        themeButton.setText(darkMode ? "Light mode" : "Dark mode");
+        revalidate();
+        repaint();
     }
 
     private void connect(boolean observeOnly) {

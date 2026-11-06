@@ -32,6 +32,8 @@ java -cp "out;resources" client.ChatWindow
 
 輸入 Server 的 IP、連接埠和暱稱，按「連線」即可聊天。同一台電腦測試時，IP 使用 `127.0.0.1`；其他電腦則使用 Server 的內網 IPv4 位址。
 
+按 `Dark mode` 或 `Light mode` 可切換介面主題。主題設定目前不會在關閉程式後保存。
+
 若沒有 Server，可在 Client 輸入 port 後按 `Start temporary server`。畫面會顯示主機的內網 IPv4 位址，提供給其他電腦使用；主機自己再輸入暱稱並按 `Connect`。按 `Stop temporary server` 或關閉主機視窗會斷開所有使用者。臨時 Server 只保留執行期間的聊天狀態，不提供帳號或保存聊天紀錄。
 
 在線上名單選擇使用者並按 `Create group`，輸入群組名稱即可建立群組；按住 Ctrl 可選取多人。群組成員會收到各自的聊天分頁。使用者離開聊天室或斷線時會離開群組，群組不會永久保存。

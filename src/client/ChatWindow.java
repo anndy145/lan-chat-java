@@ -615,7 +615,8 @@ public class ChatWindow extends JFrame {
         header.setOpaque(false);
         JLabel label = new JLabel(name);
         JButton closeButton = new JButton("×");
-        closeButton.setMargin(new Insets(0, 4, 0, 4));
+        closeButton.setPreferredSize(new java.awt.Dimension(18, 18));
+        closeButton.setMargin(new Insets(0, 0, 0, 0));
         closeButton.setFocusable(false);
         closeButton.setToolTipText("Close chat tab");
         closeButton.getAccessibleContext().setAccessibleName("Close chat tab: " + name);

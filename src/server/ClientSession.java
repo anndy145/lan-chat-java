@@ -1,5 +1,7 @@
 package server;
 
+import common.ChatProtocol;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -34,9 +36,9 @@ class ClientSession implements Runnable {
             if (requestedName == null) {
                 return;
             }
-            boolean initialObserver = "@observe:v2".equals(requestedName);
+            boolean initialObserver = ChatProtocol.OBSERVE.equals(requestedName);
             if (!initialObserver && !requestedName.startsWith("@hello:v2:")) {
-                send("@error:version");
+                send(ChatProtocol.ERROR_VERSION);
                 return;
             }
             active = false;
@@ -44,7 +46,7 @@ class ClientSession implements Runnable {
                 name = initialObserver ? "Anonymous" : cleanName(new String(
                         Base64.getDecoder().decode(requestedName.substring(10)), StandardCharsets.UTF_8));
             } catch (IllegalArgumentException exception) {
-                send("@error:version");
+                send(ChatProtocol.ERROR_VERSION);
                 return;
             }
             if (initialObserver) {
@@ -59,32 +61,32 @@ class ClientSession implements Runnable {
                     requestedQuit = true;
                     break;
                 }
-                if ("@leave".equals(line)) {
+                if (ChatProtocol.LEAVE.equals(line)) {
                     server.setActive(this, false);
                 } else if ("@join".equals(line)) {
                     server.join(this, name);
-                } else if (line.startsWith("@join:") && !isActive()) {
+                } else if (line.startsWith(ChatProtocol.JOIN) && !isActive()) {
                     try {
-                        String requested = new String(Base64.getDecoder().decode(line.substring(6)), StandardCharsets.UTF_8);
+                        String requested = new String(Base64.getDecoder().decode(line.substring(ChatProtocol.JOIN.length())), StandardCharsets.UTF_8);
                         server.join(this, cleanName(requested));
                     } catch (IllegalArgumentException exception) {
                         // 忽略格式錯誤的加入要求。
                     }
-                } else if (line.startsWith("@say:") && isActive()) {
+                } else if (line.startsWith(ChatProtocol.SAY) && isActive()) {
                     try {
-                        String text = new String(Base64.getDecoder().decode(line.substring(5)), StandardCharsets.UTF_8);
+                        String text = new String(Base64.getDecoder().decode(line.substring(ChatProtocol.SAY.length())), StandardCharsets.UTF_8);
                         if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
                             server.sendPublic(this, text);
                         }
                     } catch (IllegalArgumentException exception) {
                         send("@notice:SW52YWxpZCBtZXNzYWdlLg==");
                     }
-                } else if (line.startsWith("@private:") && isActive()) {
-                    String[] parts = line.substring(9).split(":", 2);
+                } else if (line.startsWith(ChatProtocol.PRIVATE) && isActive()) {
+                    String[] parts = line.substring(ChatProtocol.PRIVATE.length()).split(":", 2);
                     if (parts.length == 2) {
                         try {
                             String target = parts[0];
-                            String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            String text = ChatProtocol.decode(parts[1]);
                             if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
                                 server.sendPrivate(this, target, text);
                             }
@@ -92,8 +94,8 @@ class ClientSession implements Runnable {
                             send("[Private] Invalid message.");
                         }
                     }
-                } else if (line.startsWith("@group-create:") && isActive()) {
-                    String[] parts = line.substring(14).split(":", 2);
+                } else if (line.startsWith(ChatProtocol.GROUP_CREATE) && isActive()) {
+                    String[] parts = line.substring(ChatProtocol.GROUP_CREATE.length()).split(":", 2);
                     try {
                         if (parts.length == 2 && !parts[1].isEmpty()) {
                             String groupName = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8).strip();
@@ -103,18 +105,18 @@ class ClientSession implements Runnable {
                     } catch (IllegalArgumentException exception) {
                         send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
                     }
-                } else if (line.startsWith("@group-add:") && isActive()) {
-                    String[] parts = line.substring(11).split(":", 2);
+                } else if (line.startsWith(ChatProtocol.GROUP_ADD) && isActive()) {
+                    String[] parts = line.substring(ChatProtocol.GROUP_ADD.length()).split(":", 2);
                     if (parts.length == 2 && !parts[1].isEmpty()) {
                         server.addGroupMembers(this, parts[0], parts[1].split(",", -1));
                     } else {
                         send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
                     }
-                } else if (line.startsWith("@group-send:") && isActive()) {
-                    String[] parts = line.substring(12).split(":", 2);
+                } else if (line.startsWith(ChatProtocol.GROUP_SEND) && isActive()) {
+                    String[] parts = line.substring(ChatProtocol.GROUP_SEND.length()).split(":", 2);
                     try {
                         if (parts.length == 2) {
-                            String text = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+                            String text = ChatProtocol.decode(parts[1]);
                             if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
                                 server.sendGroup(this, parts[0], text);
                             }

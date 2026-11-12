@@ -1,5 +1,7 @@
 package server;
 
+import common.ChatProtocol;
+
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.NetworkInterface;
@@ -162,14 +164,14 @@ public class Server implements AutoCloseable {
     public synchronized boolean join(ClientSession session, String name) {
         if (clients.contains(session) && session.isActive())
             return false;
-        if (name.codePointCount(0, name.length()) > 32) {
-            session.send("@error:name-length");
+        if (name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
+            session.send(ChatProtocol.ERROR_NAME_LENGTH);
             return false;
         }
         boolean taken = clients.stream().anyMatch(client -> client != session
                 && client.isActive() && client.getName().equals(name));
         if (taken) {
-            session.send("@error:name");
+            session.send(ChatProtocol.ERROR_NAME);
             return false;
         }
         session.setName(name);
@@ -177,15 +179,15 @@ public class Server implements AutoCloseable {
         clients.add(session);
         session.setActive(true);
         logEvent("joined", name);
-        session.send("@joined:" + session.getUserId());
+        session.send(ChatProtocol.JOINED + session.getUserId());
         broadcastUsers();
         broadcast(timestamped(name + " joined the chat."));
         return true;
     }
 
     public synchronized void sendPrivate(ClientSession sender, String recipientId, String text) {
-        if (text.codePointCount(0, text.length()) > 2000) {
-            sender.send("@error:message-length");
+        if (text.codePointCount(0, text.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
+            sender.send(ChatProtocol.ERROR_MESSAGE_LENGTH);
             return;
         }
         if (!sender.isActive())
@@ -206,8 +208,8 @@ public class Server implements AutoCloseable {
     }
 
     public synchronized void sendPublic(ClientSession sender, String text) {
-        if (text.codePointCount(0, text.length()) > 2000) {
-            sender.send("@error:message-length");
+        if (text.codePointCount(0, text.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
+            sender.send(ChatProtocol.ERROR_MESSAGE_LENGTH);
             return;
         }
         if (!sender.isActive())
@@ -221,7 +223,7 @@ public class Server implements AutoCloseable {
 
     public synchronized void createGroup(ClientSession creator, String name, String[] requestedMembers) {
         if (!creator.isActive() || name.isBlank() || name.length() > 80 || requestedMembers.length == 0) {
-            creator.send("@notice:" + encode("Enter a group name and select at least one online user."));
+            creator.send(ChatProtocol.NOTICE + encode("Enter a group name and select at least one online user."));
             return;
         }
         Set<ClientSession> members = new LinkedHashSet<>();
@@ -230,18 +232,18 @@ public class Server implements AutoCloseable {
             ClientSession match = clients.stream().filter(ClientSession::isActive)
                     .filter(client -> client.getUserId().equals(requested)).findFirst().orElse(null);
             if (match == null || match == creator) {
-                creator.send("@notice:" + encode("A selected user is no longer online."));
+                creator.send(ChatProtocol.NOTICE + encode("A selected user is no longer online."));
                 return;
             }
             members.add(match);
         }
         if (members.size() < 2) {
-            creator.send("@notice:" + encode("Select at least one other user."));
+            creator.send(ChatProtocol.NOTICE + encode("Select at least one other user."));
             return;
         }
         String id = UUID.randomUUID().toString();
         groups.put(id, new ChatGroup(name, members));
-        String announcement = "@group:" + id + ":" + encode(name) + ":"
+        String announcement = ChatProtocol.GROUP_MESSAGE + id + ":" + encode(name) + ":"
                 + encode("Group created by " + creator.getName() + ".");
         members.forEach(member -> member.send(announcement));
     }
@@ -249,7 +251,7 @@ public class Server implements AutoCloseable {
     public synchronized void addGroupMembers(ClientSession inviter, String id, String[] requestedMembers) {
         ChatGroup group = groups.get(id);
         if (!inviter.isActive() || group == null || !group.members.contains(inviter)) {
-            inviter.send("@group-error:" + encode("You are no longer a member of this group."));
+            inviter.send(ChatProtocol.GROUP_ERROR + encode("You are no longer a member of this group."));
             return;
         }
         Set<ClientSession> additions = new LinkedHashSet<>();
@@ -257,33 +259,33 @@ public class Server implements AutoCloseable {
             ClientSession match = clients.stream().filter(ClientSession::isActive)
                     .filter(client -> client.getUserId().equals(requested)).findFirst().orElse(null);
             if (match == null) {
-                inviter.send("@group-error:" + encode("A selected user is no longer online."));
+                inviter.send(ChatProtocol.GROUP_ERROR + encode("A selected user is no longer online."));
                 return;
             }
             if (!group.members.contains(match)) additions.add(match);
         }
         if (additions.isEmpty()) {
-            inviter.send("@group-error:" + encode("The selected users are already in this group."));
+            inviter.send(ChatProtocol.GROUP_ERROR + encode("The selected users are already in this group."));
             return;
         }
         group.members.addAll(additions);
         String names = additions.stream().map(ClientSession::getName).collect(Collectors.joining(", "));
-        String announcement = "@group:" + id + ":" + encode(group.name) + ":"
+        String announcement = ChatProtocol.GROUP_MESSAGE + id + ":" + encode(group.name) + ":"
                 + encode(inviter.getName() + " added " + names + " to the group.");
         group.members.forEach(member -> member.send(announcement));
     }
 
     public synchronized void sendGroup(ClientSession sender, String id, String text) {
-        if (text.codePointCount(0, text.length()) > 2000) {
-            sender.send("@error:message-length");
+        if (text.codePointCount(0, text.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
+            sender.send(ChatProtocol.ERROR_MESSAGE_LENGTH);
             return;
         }
         ChatGroup group = groups.get(id);
         if (!sender.isActive() || group == null || !group.members.contains(sender)) {
-            sender.send("@notice:" + encode("You are no longer a member of this group."));
+            sender.send(ChatProtocol.NOTICE + encode("You are no longer a member of this group."));
             return;
         }
-        String payload = "@group:" + id + ":" + encode(group.name) + ":"
+        String payload = ChatProtocol.GROUP_MESSAGE + id + ":" + encode(group.name) + ":"
                 + encode(timestamped(sender.getName() + ": " + text));
         group.members.forEach(member -> member.send(payload));
         String recipients = group.members.stream().filter(member -> member != sender)
@@ -292,7 +294,7 @@ public class Server implements AutoCloseable {
     }
 
     private static String encode(String value) {
-        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+        return ChatProtocol.encode(value);
     }
 
     private void audit(String sender, String recipients) {
@@ -312,8 +314,8 @@ public class Server implements AutoCloseable {
 
     private void sendPrivateLine(ClientSession recipient, String peerId, String peer, String text) {
         String encodedPeer = Base64.getEncoder().encodeToString(peer.getBytes(StandardCharsets.UTF_8));
-        String encodedText = Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
-        recipient.send("@pm:" + peerId + ":" + encodedPeer + ":" + encodedText);
+        String encodedText = ChatProtocol.encode(text);
+        recipient.send(ChatProtocol.PRIVATE_MESSAGE + peerId + ":" + encodedPeer + ":" + encodedText);
     }
 
     public synchronized void setActive(ClientSession session, boolean active) {
@@ -345,7 +347,7 @@ public class Server implements AutoCloseable {
                 .sorted(java.util.Comparator.comparing(ClientSession::getName))
                 .map(client -> client.getUserId() + "=" + encode(client.getName()))
                 .collect(Collectors.joining(","));
-        String message = "@users:" + names;
+        String message = ChatProtocol.USERS + names;
         for (ClientSession client : clients) {
             client.send(message);
         }

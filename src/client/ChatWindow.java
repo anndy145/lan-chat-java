@@ -1,5 +1,7 @@
 package client;
 
+import common.ChatProtocol;
+
 import java.awt.BorderLayout;
 import java.awt.AlphaComposite;
 import java.awt.Color;
@@ -17,12 +19,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -263,11 +261,11 @@ public class ChatWindow extends JFrame {
                     JOptionPane.showMessageDialog(this, "Please enter a name.");
                     return;
                 }
-                if (name.codePointCount(0, name.length()) > 32) {
+                if (name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
                     JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
                     return;
                 }
-                output.println("@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
+                output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
                 joining = true;
                 setConnected(false);
             } else {
@@ -496,7 +494,7 @@ public class ChatWindow extends JFrame {
             return;
         }
 
-        if (!observeOnly && name.codePointCount(0, name.length()) > 32) {
+        if (!observeOnly && name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
             JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
             nameField.requestFocusInWindow();
             return;
@@ -514,17 +512,7 @@ public class ChatWindow extends JFrame {
         Thread connectionThread = new Thread(() -> {
             Socket newSocket = new Socket();
             try {
-                newSocket.connect(new InetSocketAddress(host, port), 5487);
-                BufferedReader input = new BufferedReader(
-                        new InputStreamReader(newSocket.getInputStream(), StandardCharsets.UTF_8));
-                PrintWriter writer = new PrintWriter(
-                        new OutputStreamWriter(newSocket.getOutputStream(), StandardCharsets.UTF_8), true);
-                writer.println("@observe:v2");
-                if (!observeOnly) {
-                    writer.println(
-                            "@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
-                }
-
+                ChatConnection.receive(newSocket, host, port, observeOnly, name, writer -> {
                 // Swing 元件只能在介面執行緒更新。
                 SwingUtilities.invokeLater(() -> {
                     if (!isDisplayable() || generation != connectionGeneration) {
@@ -539,13 +527,10 @@ public class ChatWindow extends JFrame {
                     setConnected(false);
                     appendMessage(observeOnly ? "Connected. You can view online users." : "Joining chat...");
                 });
-
-                String message;
-                while ((message = input.readLine()) != null) {
-                    String received = message;
+                }, received -> {
                     SwingUtilities.invokeLater(() -> {
                         if (socket == newSocket) {
-                            if (received.startsWith("@joined:")) {
+                            if (received.startsWith(ChatProtocol.JOINED)) {
                                 activeId = received.substring(8);
                                 joining = false;
                                 observing = false;
@@ -555,35 +540,35 @@ public class ChatWindow extends JFrame {
                                 activeName = nameField.getText().strip();
                                 setConnected(true);
                                 appendMessage("You joined the chat.");
-                            } else if (received.equals("@error:name-length")) {
+                            } else if (received.equals(ChatProtocol.ERROR_NAME_LENGTH)) {
                                 joining = false;
                                 observing = true;
                                 setConnected(false);
                                 JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
-                            } else if (received.equals("@error:message-length")) {
+                            } else if (received.equals(ChatProtocol.ERROR_MESSAGE_LENGTH)) {
                                 JOptionPane.showMessageDialog(this, "Message must be at most 2000 characters.");
-                            } else if (received.equals("@error:name")) {
+                            } else if (received.equals(ChatProtocol.ERROR_NAME)) {
                                 joining = false;
                                 observing = true;
                                 setConnected(false);
                                 appendMessage("That name is already in use. Choose another name.");
-                            } else if (received.equals("@error:version") || received.equals("@joined")) {
+                            } else if (received.equals(ChatProtocol.ERROR_VERSION) || received.equals("@joined")) {
                                 appendMessage("Incompatible server version. Update both server and client.");
                                 closeConnection();
-                            } else if (received.startsWith("@users:")) {
+                            } else if (received.startsWith(ChatProtocol.USERS)) {
                                 updateOnlineUsers(received.substring(7));
-                            } else if (received.startsWith("@pm:") && !observing) {
+                            } else if (received.startsWith(ChatProtocol.PRIVATE_MESSAGE) && !observing) {
                                 receivePrivate(received);
-                            } else if (received.startsWith("@group:") && !observing) {
+                            } else if (received.startsWith(ChatProtocol.GROUP_MESSAGE) && !observing) {
                                 receiveGroup(received);
-                            } else if (received.startsWith("@group-error:")) {
+                            } else if (received.startsWith(ChatProtocol.GROUP_ERROR)) {
                                 try {
                                     JOptionPane.showMessageDialog(this, new String(Base64.getDecoder().decode(
                                             received.substring(13)), StandardCharsets.UTF_8));
                                 } catch (IllegalArgumentException exception) {
                                     appendMessage("Received an invalid notification.");
                                 }
-                            } else if (received.startsWith("@notice:")) {
+                            } else if (received.startsWith(ChatProtocol.NOTICE)) {
                                 try {
                                     appendMessage(new String(Base64.getDecoder().decode(received.substring(8)),
                                             StandardCharsets.UTF_8));
@@ -595,7 +580,7 @@ public class ChatWindow extends JFrame {
                             }
                         }
                     });
-                }
+                });
                 SwingUtilities.invokeLater(() -> {
                     if (generation == connectionGeneration)
                         disconnected(newSocket, "Disconnected from the server.");
@@ -618,7 +603,7 @@ public class ChatWindow extends JFrame {
         if (output == null || message.isBlank()) {
             return;
         }
-        if (message.codePointCount(0, message.length()) > 2000) {
+        if (message.codePointCount(0, message.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
             JOptionPane.showMessageDialog(this, "Message must be at most 2000 characters.");
             return;
         }
@@ -627,17 +612,17 @@ public class ChatWindow extends JFrame {
         if ("/quit".equalsIgnoreCase(message.strip())) {
             leaveChat();
         } else if (chats.getSelectedIndex() == 0) {
-            output.println("@say:" + encode(message));
+            output.println(ChatProtocol.SAY + encode(message));
         } else if (groupChats.containsValue(chats.getSelectedComponent())) {
             String groupId = groupChats.entrySet().stream()
                     .filter(entry -> entry.getValue() == chats.getSelectedComponent())
                     .map(Map.Entry::getKey).findFirst().orElseThrow();
-            output.println("@group-send:" + groupId + ":" + encode(message));
+            output.println(ChatProtocol.GROUP_SEND + groupId + ":" + encode(message));
         } else {
             String targetId = privateChats.entrySet().stream()
                     .filter(entry -> entry.getValue().pane == chats.getSelectedComponent())
                     .map(Map.Entry::getKey).findFirst().orElseThrow();
-            output.println("@private:" + targetId + ":" + encode(message));
+            output.println(ChatProtocol.PRIVATE + targetId + ":" + encode(message));
         }
     }
 
@@ -675,7 +660,7 @@ public class ChatWindow extends JFrame {
             JOptionPane.showMessageDialog(this, "Enter a group name of up to 80 characters.");
             return;
         }
-        output.println("@group-create:" + encode(name) + ":"
+        output.println(ChatProtocol.GROUP_CREATE + encode(name) + ":"
                 + String.join(",", members));
     }
 
@@ -693,11 +678,11 @@ public class ChatWindow extends JFrame {
             JOptionPane.showMessageDialog(this, "Select at least one other online user. Hold Ctrl to select more.");
             return;
         }
-        output.println("@group-add:" + groupId + ":" + String.join(",", members));
+        output.println(ChatProtocol.GROUP_ADD + groupId + ":" + String.join(",", members));
     }
 
     private static String encode(String text) {
-        return Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
+        return ChatProtocol.encode(text);
     }
 
     private void receiveGroup(String message) {
@@ -705,8 +690,8 @@ public class ChatWindow extends JFrame {
         if (parts.length != 3)
             return;
         try {
-            String name = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
-            String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
+            String name = ChatProtocol.decode(parts[1]);
+            String text = ChatProtocol.decode(parts[2]);
             JScrollPane pane = groupChats.get(parts[0]);
             if (pane == null) {
                 JTextArea area = new JTextArea();
@@ -750,8 +735,8 @@ public class ChatWindow extends JFrame {
         if (parts.length != 3)
             return;
         try {
-            String peer = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8);
-            String text = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
+            String peer = ChatProtocol.decode(parts[1]);
+            String text = ChatProtocol.decode(parts[2]);
             PrivateChat chat = privateChats.get(parts[0]);
             if (chat != null)
                 chat = privateChat(parts[0], chat.name);
@@ -776,7 +761,7 @@ public class ChatWindow extends JFrame {
         }
         observing = true;
         activeId = null;
-        output.println("@leave");
+        output.println(ChatProtocol.LEAVE);
         clearGroupChats();
         setConnected(false);
         inputField.setText("");
@@ -929,7 +914,7 @@ public class ChatWindow extends JFrame {
                         throw new IllegalArgumentException();
                     java.util.UUID.fromString(parts[0]);
                     onlineUsers.addElement(new OnlineUser(parts[0],
-                            new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.UTF_8)));
+                            ChatProtocol.decode(parts[1])));
                 } catch (IllegalArgumentException exception) {
                     appendMessage("Received an invalid online user list.");
                     onlineUsers.clear();

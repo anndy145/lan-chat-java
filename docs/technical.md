@@ -88,6 +88,6 @@ Server 主控台顯示使用者加入、主動離開或連線中斷的時間與�
 臨時 ID 的回歸測試位於 `tests/IdentityRegression.java`。在 Windows 的專案根目錄執行：
 
 ```cmd
-javac -encoding UTF-8 -d out src\server\*.java src\client\*.java tests\IdentityRegression.java
+javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java tests\IdentityRegression.java
 java -cp out IdentityRegression
 ```

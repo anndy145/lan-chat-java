@@ -25,20 +25,22 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out/classes, out/input, out/portable | Out-Null
-          javac -encoding UTF-8 -d out/classes src/client/*.java src/server/*.java
+          javac -encoding UTF-8 -d out/classes src/common/*.java src/client/*.java src/server/*.java
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create client JAR
         shell: pwsh
-        run: jar --create --file out/input/client.jar --main-class client.ChatWindow -C out/classes client -C out/classes server -C resources buttons
+        run: jar --create --file out/input/client.jar --main-class client.ChatWindow -C out/classes client -C out/classes server -C out/classes common -C resources buttons
 
       - name: Test temporary user identities
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out/test-classes | Out-Null
-          javac -encoding UTF-8 -cp out/classes -d out/test-classes tests/IdentityRegression.java
+          javac -encoding UTF-8 -cp out/classes -d out/test-classes tests/IdentityRegression.java tests/ClientCommandRegression.java
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           java -cp "out/classes;out/test-classes" IdentityRegression
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java -cp "out/classes;out/test-classes" ClientCommandRegression
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create portable application

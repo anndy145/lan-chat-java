@@ -3,7 +3,7 @@
 在專案根目錄執行：
 
 ```cmd
-javac -encoding UTF-8 -d out src\server\*.java src\client\*.java
+javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java
 ```
 
 ## 使用方式 (GUI)
@@ -41,3 +41,4 @@ Server 主控台顯示使用者加入、離開或斷線的時間，以及訊息�
 命令列輸入 /users 可隨時顯示目前的線上使用者；觀察模式也可以使用。
 
 命令列輸入 `/help` 可查看所有可用指令。
+命令列的未知指令不會公開傳送。如果公開訊息需要以 `/` 開頭，請輸入兩個斜線，例如 `//hello` 會傳送 `/hello`。

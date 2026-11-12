@@ -8,6 +8,9 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Client {
@@ -40,6 +43,8 @@ public class Client {
 
     private static class ChatState {
         Mode mode = Mode.OBSERVING;
+        String ownId;
+        Map<String, String> onlineUsers = new HashMap<>();
     }
 
     private static void connect(String host, int port, String name) {
@@ -84,6 +89,7 @@ public class Client {
                             System.out.println("You are not currently in the chat.");
                         } else {
                             state.mode = Mode.OBSERVING;
+                            state.ownId = null;
                             serverOutput.println("@leave");
                             System.out.println("You left the chat. Still observing online users.");
                         }
@@ -108,7 +114,9 @@ public class Client {
                         continue;
                     }
                 }
-                if (line.startsWith("/group ")) {
+                if (line.equals("/msg") || line.startsWith("/msg ")) {
+                    sendPrivateMessage(line, serverOutput, state);
+                } else if (line.startsWith("/group ")) {
                     String[] parts = line.split(" ", 3);
                     if (parts.length < 3 || parts[2].isBlank()) {
                         System.out.println("Usage: /group <group-id> <message>");
@@ -141,6 +149,62 @@ public class Client {
         }
     }
 
+    // 引號中的 \ 和 \" 分別代表反斜線和雙引號。
+    private static void sendPrivateMessage(String line, PrintWriter output, ChatState state) {
+        String args = line.substring(4).stripLeading();
+        String name;
+        int end;
+        if (args.startsWith("\"")) {
+            StringBuilder parsed = new StringBuilder();
+            int index = 1;
+            boolean closed = false;
+            while (index < args.length()) {
+                char ch = args.charAt(index++);
+                if (ch == '"') { closed = true; break; }
+                if (ch == '\\') {
+                    if (index >= args.length() || (args.charAt(index) != '\\' && args.charAt(index) != '"')) {
+                        System.out.println("Invalid escape in name. Use \\\\ or \\\".");
+                        return;
+                    }
+                    ch = args.charAt(index++);
+                }
+                parsed.append(ch);
+            }
+            if (!closed || index >= args.length() || !Character.isWhitespace(args.charAt(index))) {
+                System.out.println("Usage: /msg <name> <message> (use quotes for names with spaces)");
+                return;
+            }
+            name = parsed.toString();
+            end = index;
+        } else {
+            end = 0;
+            while (end < args.length() && !Character.isWhitespace(args.charAt(end))) end++;
+            name = args.substring(0, end);
+        }
+        String text = args.substring(end).stripLeading();
+        if (name.isEmpty() || text.isBlank()) {
+            System.out.println("Usage: /msg <name> <message> (use quotes for names with spaces)");
+            return;
+        }
+        if (text.codePointCount(0, text.length()) > 2000) {
+            System.out.println("Message must be at most 2000 characters.");
+            return;
+        }
+        String id;
+        synchronized (state) {
+            id = state.onlineUsers.get(name);
+            if (id == null) {
+                System.out.println("User is not online.");
+                return;
+            }
+            if (id.equals(state.ownId)) {
+                System.out.println("You cannot message yourself.");
+                return;
+            }
+        }
+        output.println("@private:" + id + ":" + encode(text));
+    }
+
     private static String encode(String text) {
         return Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
     }
@@ -150,7 +214,7 @@ public class Client {
             String message;
             while ((message = serverInput.readLine()) != null) {
                 if (message.startsWith("@joined:")) {
-                    synchronized (state) { state.mode = Mode.ACTIVE; }
+                    synchronized (state) { state.mode = Mode.ACTIVE; state.ownId = message.substring(8); }
                     System.out.println("Joined chat. Type /leave to observe or /quit to exit.");
                     continue;
                 } else if (message.equals("@joined") || message.equals("@error:version")) {
@@ -196,6 +260,7 @@ public class Client {
                 } else if (message.startsWith("@users:")) {
                     String encodedNames = message.substring(7);
                     StringBuilder names = new StringBuilder();
+                    Map<String, String> users = new HashMap<>();
                     if (!encodedNames.isEmpty()) {
                         for (String encoded : encodedNames.split(",")) {
                             if (names.length() > 0)
@@ -205,9 +270,18 @@ public class Client {
                                 System.out.println("Incompatible server version. Update both server and client.");
                                 return;
                             }
-                            names.append(new String(Base64.getDecoder().decode(user[1]), StandardCharsets.UTF_8));
+                            try {
+                                UUID.fromString(user[0]);
+                                String name = new String(Base64.getDecoder().decode(user[1]), StandardCharsets.UTF_8);
+                                names.append(name);
+                                users.put(name, user[0]);
+                            } catch (IllegalArgumentException exception) {
+                                System.out.println("Invalid online user list received.");
+                                return;
+                            }
                         }
                     }
+                    synchronized (state) { state.onlineUsers = users; }
                     System.out.println("線上使用者：" + names);
                 } else {
                     System.out.println(message);

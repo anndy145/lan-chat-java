@@ -39,7 +39,8 @@ public class ClientCommandRegression {
                 while (!input.readLine().startsWith("@joined:")) {}
 
                 Process client = new ProcessBuilder(System.getProperty("java.home") + "/bin/java",
-                        "-Dfile.encoding=UTF-8", "-cp", System.getProperty("java.class.path"),
+                        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8",
+                        "-cp", System.getProperty("java.class.path"),
                         "client.Client", "127.0.0.1", Integer.toString(port), "--observe")
                         .redirectErrorStream(true).start();
                 Thread reader = new Thread(() -> {

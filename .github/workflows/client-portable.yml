@@ -2,8 +2,14 @@ name: Build Windows portable client
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version tag to release (leave empty to build only)'
+        required: false
+        type: string
   push:
     branches: [main]
+    tags: ['v*']
 
 permissions:
   contents: write
@@ -12,8 +18,20 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      - name: Validate requested version tag
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+(\.[0-9]+){1,2}$') {
+            throw 'Use a version tag such as v0.4 or v0.4.1.'
+          }
+
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -72,18 +90,17 @@ jobs:
           if-no-files-found: error
 
       - name: Create release archive
+        if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         shell: pwsh
         run: Compress-Archive -Path out/portable/LanChatClient/* -DestinationPath out/LanChatClient-Windows-x64.zip
 
       - name: Publish GitHub release
+        if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          $tag = "build-$env:RUN_ID-$env:RUN_ATTEMPT"
-          gh release create $tag out/LanChatClient-Windows-x64.zip --target $env:COMMIT_SHA --title "Windows portable build $tag" --notes "Automated build from commit $env:COMMIT_SHA."
+          gh release create $env:RELEASE_TAG out/LanChatClient-Windows-x64.zip --verify-tag --title $env:RELEASE_TAG --notes "Windows portable client for $env:RELEASE_TAG."
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

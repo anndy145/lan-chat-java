@@ -84,6 +84,10 @@ public class Client {
                     serverOutput.println(line);
                     break;
                 }
+                if (line.trim().equalsIgnoreCase("/help")) {
+                    printHelp();
+                    continue;
+                }
                 synchronized (state) {
                     if (line.trim().equalsIgnoreCase("/users")) {
                         if (!state.usersReceived) {
@@ -158,6 +162,19 @@ public class Client {
                 System.err.println("Could not close connection: " + exception.getMessage());
             }
         }
+    }
+
+    private static void printHelp() {
+        System.out.println("Commands:");
+        System.out.println("  /help                    Show this help.");
+        System.out.println("  /users                   Show online users.");
+        System.out.println("  /join <name>             Join chat from observer mode.");
+        System.out.println("  /leave                   Leave chat and continue observing.");
+        System.out.println("  /msg <name> <message>    Send a private message (chat mode).");
+        System.out.println("                           Quote names with spaces: /msg \"Andy Chen\" Hello there");
+        System.out.println("  /group <id> <message>    Send to a group you joined (chat mode).");
+        System.out.println("  /quit                    Disconnect and exit.");
+        System.out.println("  Other text               Send to the lobby (chat mode).");
     }
 
     // 引號中的 \ 和 \" 分別代表反斜線和雙引號。

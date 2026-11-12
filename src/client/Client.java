@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Client {
     public static void main(String[] args) {
         if (args.length != 3) {
-            System.err.println("Usage: java Client <server-ip> <port> <name>");
+            System.err.println("Usage: java Client <server-ip> <port> <name|--observe>");
             System.exit(1);
         }
 
@@ -29,11 +29,17 @@ public class Client {
         }
 
         String name = args[2].strip();
-        if (name.codePointCount(0, name.length()) > 32) {
-            System.err.println("Name must be at most 32 characters.");
+        if (!name.equals("--observe") && (name.isEmpty() || name.codePointCount(0, name.length()) > 32)) {
+            System.err.println("Name must contain 1 to 32 characters.");
             return;
         }
-        connect(args[0], port, args[2]);
+        connect(args[0], port, name);
+    }
+
+    private enum Mode { OBSERVING, JOINING, ACTIVE }
+
+    private static class ChatState {
+        Mode mode = Mode.OBSERVING;
     }
 
     private static void connect(String host, int port, String name) {
@@ -43,21 +49,27 @@ public class Client {
                 PrintWriter serverOutput = new PrintWriter(
                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
             BufferedReader keyboard = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-            serverOutput.println("@hello:v2:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
-            System.out.println("Connected. Type a message and press Enter. Type /quit to leave.");
+            ChatState state = new ChatState();
+            serverOutput.println("@observe:v2");
+            if (!name.equals("--observe")) {
+                state.mode = Mode.JOINING;
+                serverOutput.println("@join:" + encode(name));
+            } else {
+                System.out.println("Observing online users. Type /join <name> to join or /quit to exit.");
+            }
 
             AtomicBoolean leaving = new AtomicBoolean(false);
-            Thread sender = new Thread(() -> sendMessages(keyboard, serverOutput, socket, leaving), "keyboard-sender");
+            Thread sender = new Thread(() -> sendMessages(keyboard, serverOutput, socket, leaving, state), "keyboard-sender");
             sender.setDaemon(true);
             sender.start();
-            receiveMessages(serverInput, leaving);
+            receiveMessages(serverInput, leaving, state);
         } catch (IOException exception) {
             System.err.println("Could not connect to " + host + ":" + port + ". " + exception.getMessage());
         }
     }
 
     private static void sendMessages(BufferedReader keyboard, PrintWriter serverOutput,
-            Socket socket, AtomicBoolean leaving) {
+            Socket socket, AtomicBoolean leaving, ChatState state) {
         try {
             String line;
             while ((line = keyboard.readLine()) != null) {
@@ -65,6 +77,36 @@ public class Client {
                     leaving.set(true);
                     serverOutput.println(line);
                     break;
+                }
+                synchronized (state) {
+                    if (line.equalsIgnoreCase("/leave")) {
+                        if (state.mode != Mode.ACTIVE) {
+                            System.out.println("You are not currently in the chat.");
+                        } else {
+                            state.mode = Mode.OBSERVING;
+                            serverOutput.println("@leave");
+                            System.out.println("You left the chat. Still observing online users.");
+                        }
+                        continue;
+                    }
+                    if (line.equals("/join") || line.startsWith("/join ")) {
+                        if (state.mode != Mode.OBSERVING) {
+                            System.out.println("Already joined or joining the chat.");
+                            continue;
+                        }
+                        String requested = line.substring(5).strip();
+                        if (requested.isEmpty() || requested.codePointCount(0, requested.length()) > 32) {
+                            System.out.println("Usage: /join <name> (1 to 32 characters)");
+                            continue;
+                        }
+                        state.mode = Mode.JOINING;
+                        serverOutput.println("@join:" + encode(requested));
+                        continue;
+                    }
+                    if (state.mode != Mode.ACTIVE) {
+                        System.out.println("You are observing. Type /join <name> before sending messages.");
+                        continue;
+                    }
                 }
                 if (line.startsWith("/group ")) {
                     String[] parts = line.split(" ", 3);
@@ -99,21 +141,29 @@ public class Client {
         }
     }
 
-    private static void receiveMessages(BufferedReader serverInput, AtomicBoolean leaving) {
+    private static String encode(String text) {
+        return Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void receiveMessages(BufferedReader serverInput, AtomicBoolean leaving, ChatState state) {
         try {
             String message;
             while ((message = serverInput.readLine()) != null) {
                 if (message.startsWith("@joined:")) {
+                    synchronized (state) { state.mode = Mode.ACTIVE; }
+                    System.out.println("Joined chat. Type /leave to observe or /quit to exit.");
                     continue;
                 } else if (message.equals("@joined") || message.equals("@error:version")) {
                     System.out.println("Incompatible server version. Update both server and client.");
                     return;
                 } else if (message.equals("@error:name-length")) {
-                    System.out.println("Name must be at most 32 characters.");
+                    synchronized (state) { state.mode = Mode.OBSERVING; }
+                    System.out.println("Name must contain 1 to 32 characters. Type /join <name> to try again.");
                 } else if (message.equals("@error:message-length")) {
                     System.out.println("Message must be at most 2000 characters.");
                 } else if (message.equals("@error:name")) {
-                    System.out.println("Name is already in use.");
+                    synchronized (state) { state.mode = Mode.OBSERVING; }
+                    System.out.println("Name is already in use. Type /join <name> to try again.");
                 } else if (message.startsWith("@notice:")) {
                     try {
                         System.out.println(

@@ -35,3 +35,5 @@ java -cp out client.Client <ip address> <port> <username>
 命令列使用者受邀後可用 `/group <group-id> <message>` 回覆；輸入 `/quit` 可離開聊天室。Server 與 Client 請使用相同版本。私訊分頁使用臨時 ID 辨識對象；對方離線後，須從名單重新選擇才能與新連線聊天。
 
 Server 主控台顯示使用者加入、離開或斷線的時間，以及訊息的傳送時間、發送者與收件者；不保存聊天內容。
+
+命令列也可以使用觀察模式：以 `java -cp out client.Client <ip> <port> --observe` 啟動，只查看線上名單。輸入 `/join <暱稱>` 加入聊天；輸入 `/leave` 離開聊天但繼續查看線上名單；輸入 `/quit` 完全離開。重新加入後會取得新的使用者 ID，原本的群組成員身分不會保留。

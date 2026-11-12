@@ -162,6 +162,10 @@ public class Server implements AutoCloseable {
     public synchronized boolean join(ClientSession session, String name) {
         if (clients.contains(session) && session.isActive())
             return false;
+        if (name.codePointCount(0, name.length()) > 32) {
+            session.send("@error:name-length");
+            return false;
+        }
         boolean taken = clients.stream().anyMatch(client -> client != session
                 && client.isActive() && client.getName().equals(name));
         if (taken) {
@@ -180,6 +184,10 @@ public class Server implements AutoCloseable {
     }
 
     public synchronized void sendPrivate(ClientSession sender, String recipientId, String text) {
+        if (text.codePointCount(0, text.length()) > 2000) {
+            sender.send("@error:message-length");
+            return;
+        }
         if (!sender.isActive())
             return;
         for (ClientSession recipient : clients) {
@@ -198,6 +206,10 @@ public class Server implements AutoCloseable {
     }
 
     public synchronized void sendPublic(ClientSession sender, String text) {
+        if (text.codePointCount(0, text.length()) > 2000) {
+            sender.send("@error:message-length");
+            return;
+        }
         if (!sender.isActive())
             return;
         String recipients = clients.stream().filter(ClientSession::isActive)
@@ -262,6 +274,10 @@ public class Server implements AutoCloseable {
     }
 
     public synchronized void sendGroup(ClientSession sender, String id, String text) {
+        if (text.codePointCount(0, text.length()) > 2000) {
+            sender.send("@error:message-length");
+            return;
+        }
         ChatGroup group = groups.get(id);
         if (!sender.isActive() || group == null || !group.members.contains(sender)) {
             sender.send("@notice:" + encode("You are no longer a member of this group."));

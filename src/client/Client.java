@@ -28,6 +28,11 @@ public class Client {
             return;
         }
 
+        String name = args[2].strip();
+        if (name.codePointCount(0, name.length()) > 32) {
+            System.err.println("Name must be at most 32 characters.");
+            return;
+        }
         connect(args[0], port, args[2]);
     }
 
@@ -67,9 +72,17 @@ public class Client {
                         System.out.println("Usage: /group <group-id> <message>");
                         continue;
                     }
+                    if (parts[2].codePointCount(0, parts[2].length()) > 2000) {
+                        System.out.println("Message must be at most 2000 characters.");
+                        continue;
+                    }
                     String encoded = Base64.getEncoder().encodeToString(parts[2].getBytes(StandardCharsets.UTF_8));
                     serverOutput.println("@group-send:" + parts[1] + ":" + encoded);
                 } else {
+                    if (line.codePointCount(0, line.length()) > 2000) {
+                        System.out.println("Message must be at most 2000 characters.");
+                        continue;
+                    }
                     String encoded = Base64.getEncoder().encodeToString(line.getBytes(StandardCharsets.UTF_8));
                     serverOutput.println("@say:" + encoded);
                 }
@@ -95,6 +108,10 @@ public class Client {
                 } else if (message.equals("@joined") || message.equals("@error:version")) {
                     System.out.println("Incompatible server version. Update both server and client.");
                     return;
+                } else if (message.equals("@error:name-length")) {
+                    System.out.println("Name must be at most 32 characters.");
+                } else if (message.equals("@error:message-length")) {
+                    System.out.println("Message must be at most 2000 characters.");
                 } else if (message.equals("@error:name")) {
                     System.out.println("Name is already in use.");
                 } else if (message.startsWith("@notice:")) {

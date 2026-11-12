@@ -263,6 +263,10 @@ public class ChatWindow extends JFrame {
                     JOptionPane.showMessageDialog(this, "Please enter a name.");
                     return;
                 }
+                if (name.codePointCount(0, name.length()) > 32) {
+                    JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
+                    return;
+                }
                 output.println("@join:" + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)));
                 joining = true;
                 setConnected(false);
@@ -492,6 +496,12 @@ public class ChatWindow extends JFrame {
             return;
         }
 
+        if (!observeOnly && name.codePointCount(0, name.length()) > 32) {
+            JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
+            nameField.requestFocusInWindow();
+            return;
+        }
+
         connecting = true;
         clearPrivateChats();
         activeName = null;
@@ -545,6 +555,13 @@ public class ChatWindow extends JFrame {
                                 activeName = nameField.getText().strip();
                                 setConnected(true);
                                 appendMessage("You joined the chat.");
+                            } else if (received.equals("@error:name-length")) {
+                                joining = false;
+                                observing = true;
+                                setConnected(false);
+                                JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
+                            } else if (received.equals("@error:message-length")) {
+                                JOptionPane.showMessageDialog(this, "Message must be at most 2000 characters.");
                             } else if (received.equals("@error:name")) {
                                 joining = false;
                                 observing = true;
@@ -599,6 +616,10 @@ public class ChatWindow extends JFrame {
     private void sendMessage() {
         String message = inputField.getText();
         if (output == null || message.isBlank()) {
+            return;
+        }
+        if (message.codePointCount(0, message.length()) > 2000) {
+            JOptionPane.showMessageDialog(this, "Message must be at most 2000 characters.");
             return;
         }
         // 伺服器會把訊息廣播回來，因此此處不重複加到聊天區。

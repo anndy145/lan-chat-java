@@ -45,6 +45,7 @@ public class Client {
         Mode mode = Mode.OBSERVING;
         String ownId;
         Map<String, String> onlineUsers = new HashMap<>();
+        boolean usersReceived;
     }
 
     private static void connect(String host, int port, String name) {
@@ -84,6 +85,16 @@ public class Client {
                     break;
                 }
                 synchronized (state) {
+                    if (line.trim().equalsIgnoreCase("/users")) {
+                        if (!state.usersReceived) {
+                            System.out.println("Online user list has not been received yet.");
+                        } else {
+                            String names = state.onlineUsers.keySet().stream().sorted()
+                                    .collect(java.util.stream.Collectors.joining(", "));
+                            System.out.println("線上使用者：" + (names.isEmpty() ? "(none)" : names));
+                        }
+                        continue;
+                    }
                     if (line.equalsIgnoreCase("/leave")) {
                         if (state.mode != Mode.ACTIVE) {
                             System.out.println("You are not currently in the chat.");
@@ -281,7 +292,7 @@ public class Client {
                             }
                         }
                     }
-                    synchronized (state) { state.onlineUsers = users; }
+                    synchronized (state) { state.onlineUsers = users; state.usersReceived = true; }
                     System.out.println("線上使用者：" + names);
                 } else {
                     System.out.println(message);

@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -68,3 +68,20 @@ jobs:
           name: LanChatClient-Windows-x64
           path: out/portable/LanChatClient/
           if-no-files-found: error
+
+      - name: Create release archive
+        shell: pwsh
+        run: Compress-Archive -Path out/portable/LanChatClient/* -DestinationPath out/LanChatClient-Windows-x64.zip
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          $tag = "build-$env:RUN_ID-$env:RUN_ATTEMPT"
+          gh release create $tag out/LanChatClient-Windows-x64.zip --target $env:COMMIT_SHA --title "Windows portable build $tag" --notes "Automated build from commit $env:COMMIT_SHA."
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

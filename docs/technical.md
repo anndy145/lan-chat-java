@@ -10,7 +10,9 @@ Server 使用 TCP `ServerSocket` 接受連線。每個 Client 透過一條 TCP S
 | --- | --- |
 | `src/server/Server.java` | 管理 Server、Client 與群組，轉送訊息並輸出事件紀錄。 |
 | `src/server/ClientSession.java` | 處理單一連線的輸入、協定解析與結束。 |
-| `src/client/ChatWindow.java` | 提供 Swing 介面、聊天分頁及使用者操作。 |
+| `src/client/ChatWindow.java` | View：提供 Swing 介面、聊天分頁與顯示。 |
+| `src/client/ChatModel.java` | Model：保存 GUI 連線、使用者及臨時 Server 狀態。 |
+| `src/client/ChatController.java` | Controller：處理操作、連線事件、協定訊息及狀態更新。 |
 | `src/client/ChatConnection.java` | 建立 GUI Client 的 Socket 連線、送出初始協定訊息並讀取回應。 |
 | `src/client/Client.java` | 提供命令列介面、觀察模式與聊天指令。 |
 | `src/common/ChatProtocol.java` | 提供 Client 和 Server 共用的協定字串、Base64 編解碼及文字長度常數。 |

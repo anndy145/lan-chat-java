@@ -1,6 +1,6 @@
 package client;
 
-import common.ChatProtocol;
+import client.ChatModel.OnlineUser;
 
 import java.awt.BorderLayout;
 import java.awt.AlphaComposite;
@@ -19,11 +19,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.swing.DefaultListModel;
@@ -34,7 +29,6 @@ import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -45,34 +39,30 @@ import javax.swing.UIManager;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.ListSelectionModel;
 import java.util.List;
-import java.util.stream.Collectors;
-import server.Server;
 
 public class ChatWindow extends JFrame {
-    private final JTextField hostField = new JTextField("127.0.0.1");
-    private final JTextField portField = new JTextField("5487");
-    private final JTextField nameField = new JTextField();
-    private final JButton connectButton = new JButton("Connect");
-    private final JButton viewUsersButton = new JButton("View online users");
-    private final JButton hostButton = new JButton("Start temporary server");
-    private final JButton themeButton = new JButton("Dark mode");
-    private final JTextArea chatArea = new JTextArea();
-    private final JTextField inputField = new JTextField();
-    private final JButton sendButton = new JButton("Send");
-    private final JButton leaveButton = new JButton("Leave");
-    private final JButton privateButton = new JButton("Open private chat");
-    private final JButton createGroupButton = new JButton("Create group");
-    private final JButton addMembersButton = new JButton("Add members");
-    private final DefaultListModel<OnlineUser> onlineUsers = new DefaultListModel<>();
-    private final JList<OnlineUser> usersList = new JList<>(onlineUsers);
-    private final JTabbedPane chats = new JTabbedPane();
-    private final Map<String, PrivateChat> privateChats = new LinkedHashMap<>();
-    private final Map<String, JScrollPane> groupChats = new LinkedHashMap<>();
-    private final Map<Component, String> tabNames = new LinkedHashMap<>();
-    private final Map<Component, Integer> unreadCounts = new LinkedHashMap<>();
-    private final Map<Component, JLabel> tabLabels = new LinkedHashMap<>();
-    private String activeName;
-    private String activeId;
+    final JTextField hostField = new JTextField("127.0.0.1");
+    final JTextField portField = new JTextField("5487");
+    final JTextField nameField = new JTextField();
+    final JButton connectButton = new JButton("Connect");
+    final JButton viewUsersButton = new JButton("View online users");
+    final JButton hostButton = new JButton("Start temporary server");
+    final JButton themeButton = new JButton("Dark mode");
+    final JTextArea chatArea = new JTextArea();
+    final JTextField inputField = new JTextField();
+    final JButton sendButton = new JButton("Send");
+    final JButton leaveButton = new JButton("Leave");
+    final JButton privateButton = new JButton("Open private chat");
+    final JButton createGroupButton = new JButton("Create group");
+    final JButton addMembersButton = new JButton("Add members");
+    final DefaultListModel<OnlineUser> onlineUsers = new DefaultListModel<>();
+    final JList<OnlineUser> usersList = new JList<>(onlineUsers);
+    final JTabbedPane chats = new JTabbedPane();
+    final Map<String, PrivateChat> privateChats = new LinkedHashMap<>();
+    final Map<String, JScrollPane> groupChats = new LinkedHashMap<>();
+    final Map<Component, String> tabNames = new LinkedHashMap<>();
+    final Map<Component, Integer> unreadCounts = new LinkedHashMap<>();
+    final Map<Component, JLabel> tabLabels = new LinkedHashMap<>();
     private boolean darkMode;
     private final Map<String, Object> lightThemeDefaults = new LinkedHashMap<>();
 
@@ -91,32 +81,7 @@ public class ChatWindow extends JFrame {
             "OptionPane.messageForeground", "ToolTip.background", "ToolTip.foreground"
     };
 
-    private static final class OnlineUser {
-        final String id;
-        final String name;
-
-        OnlineUser(String id, String name) {
-            this.id = id;
-            this.name = name;
-        }
-
-        @Override
-        public String toString() {
-            return name;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof OnlineUser && id.equals(((OnlineUser) other).id);
-        }
-
-        @Override
-        public int hashCode() {
-            return id.hashCode();
-        }
-    }
-
-    private static final class PrivateChat {
+    static final class PrivateChat {
         final String name;
         final JTextArea area;
         final JScrollPane pane;
@@ -129,15 +94,8 @@ public class ChatWindow extends JFrame {
     }
 
     // 連線狀態和介面元件只在 Swing 介面執行緒中讀寫。
-    private Socket socket;
-    private PrintWriter output;
-    private boolean connecting;
-    private boolean observing;
-    private boolean joining;
-    private long connectionGeneration;
-    private Server temporaryServer;
-    private boolean startingServer;
-    private long serverGeneration;
+    private final ChatModel model = new ChatModel();
+    private final ChatController controller = new ChatController(this, model);
 
     public ChatWindow() {
         super("Chat Room");
@@ -226,7 +184,7 @@ public class ChatWindow extends JFrame {
                     return;
                 int index = usersList.locationToIndex(event.getPoint());
                 if (index >= 0 && usersList.getCellBounds(index, index).contains(event.getPoint())) {
-                    openPrivateChat(onlineUsers.get(index));
+                    controller.openPrivateChat(onlineUsers.get(index));
                 }
             }
         });
@@ -236,8 +194,8 @@ public class ChatWindow extends JFrame {
             public Component getListCellRendererComponent(JList<?> list, Object value, int index,
                     boolean selected, boolean focus) {
                 super.getListCellRendererComponent(list, value, index, selected, focus);
-                if (!observing && !joining && socket != null && value instanceof OnlineUser
-                        && ((OnlineUser) value).id.equals(activeId)) {
+                if (!model.observing && !model.joining && model.socket != null && value instanceof OnlineUser
+                        && ((OnlineUser) value).id.equals(model.activeId)) {
                     setText(value + " (You)");
                 }
                 return this;
@@ -254,50 +212,21 @@ public class ChatWindow extends JFrame {
         add(inputPanel, BorderLayout.SOUTH);
         setConnected(false);
 
-        connectButton.addActionListener(event -> {
-            if (observing && output != null) {
-                String name = nameField.getText().strip();
-                if (name.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please enter a name.");
-                    return;
-                }
-                if (name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
-                    JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
-                    return;
-                }
-                output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
-                joining = true;
-                setConnected(false);
-            } else {
-                connect(false);
-            }
-        });
-        viewUsersButton.addActionListener(event -> {
-            if (observing) {
-                closeConnection();
-                appendMessage("Disconnected.");
-            } else {
-                connect(true);
-            }
-        });
-        hostButton.addActionListener(event -> {
-            if (temporaryServer != null)
-                stopTemporaryServer();
-            else
-                startTemporaryServer();
-        });
-        sendButton.addActionListener(event -> sendMessage());
+        connectButton.addActionListener(event -> controller.connectAction());
+        viewUsersButton.addActionListener(event -> controller.viewUsersAction());
+        hostButton.addActionListener(event -> controller.hostAction());
+        sendButton.addActionListener(event -> controller.sendMessage());
         themeButton.addActionListener(event -> toggleTheme());
-        privateButton.addActionListener(event -> openSelectedChat());
-        createGroupButton.addActionListener(event -> createGroup());
-        addMembersButton.addActionListener(event -> addGroupMembers());
-        leaveButton.addActionListener(event -> leaveChat());
-        inputField.addActionListener(event -> sendMessage());
+        privateButton.addActionListener(event -> controller.openSelectedChat());
+        createGroupButton.addActionListener(event -> controller.createGroup());
+        addMembersButton.addActionListener(event -> controller.addGroupMembers());
+        leaveButton.addActionListener(event -> controller.leaveChat());
+        inputField.addActionListener(event -> controller.sendMessage());
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosed(WindowEvent event) {
-                closeConnection();
-                stopTemporaryServer();
+                controller.closeConnection();
+                controller.stopTemporaryServer();
             }
         });
     }
@@ -317,73 +246,6 @@ public class ChatWindow extends JFrame {
         }
     }
 
-    private void startTemporaryServer() {
-        int port;
-        try {
-            port = Integer.parseInt(portField.getText().strip());
-            if (port < 1 || port > 65535)
-                throw new NumberFormatException();
-        } catch (NumberFormatException exception) {
-            JOptionPane.showMessageDialog(this, "Port must be a number from 1 to 65535.");
-            return;
-        }
-        startingServer = true;
-        long generation = ++serverGeneration;
-        setConnected(false);
-        Thread worker = new Thread(() -> {
-            Server server = new Server(port);
-            try {
-                server.bind();
-                String addresses = Server.lanAddresses();
-                SwingUtilities.invokeLater(() -> {
-                    if (!isDisplayable() || generation != serverGeneration) {
-                        server.close();
-                        return;
-                    }
-                    temporaryServer = server;
-                    startingServer = false;
-                    hostField.setText("127.0.0.1");
-                    setConnected(false);
-                    appendMessage("Temporary server started on port " + port + ". LAN IP: " + addresses);
-                });
-                server.serve();
-                SwingUtilities.invokeLater(() -> {
-                    if (generation == serverGeneration && temporaryServer == server) {
-                        temporaryServer = null;
-                        setConnected(socket != null && !observing);
-                        appendMessage("Temporary server stopped.");
-                    }
-                });
-            } catch (IOException exception) {
-                SwingUtilities.invokeLater(() -> {
-                    if (generation != serverGeneration || !isDisplayable())
-                        return;
-                    temporaryServer = null;
-                    startingServer = false;
-                    setConnected(socket != null && !observing);
-                    appendMessage("Temporary server failed: " + exception.getMessage());
-                });
-            } finally {
-                server.close();
-            }
-        }, "temporary-server");
-        worker.setDaemon(true);
-        worker.start();
-    }
-
-    private void stopTemporaryServer() {
-        serverGeneration++;
-        startingServer = false;
-        Server server = temporaryServer;
-        temporaryServer = null;
-        if (server != null) {
-            server.close();
-            appendMessage("Temporary server stopped.");
-        }
-        setConnected(socket != null && !observing);
-    }
-
-    // 載入按鈕圖示；若找不到圖片，保留按鈕原本的文字。
     private void setButtonIcon(JButton button, String path, String description) {
         java.net.URL resource = ChatWindow.class.getResource(path);
         if (resource != null) {
@@ -467,254 +329,53 @@ public class ChatWindow extends JFrame {
         repaint();
     }
 
-    private void connect(boolean observeOnly) {
-        String host = hostField.getText().strip();
-        String name = nameField.getText().strip();
-        if (host.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please enter a server IP or hostname.");
-            hostField.requestFocusInWindow();
-            return;
+    void showGroupMessage(String id, String name, String text) {
+        JScrollPane pane = groupChats.get(id);
+        if (pane == null) {
+            JTextArea area = new JTextArea();
+            area.setEditable(false);
+            area.setLineWrap(true);
+            area.setWrapStyleWord(true);
+            pane = new JScrollPane(area);
+            groupChats.put(id, pane);
+            addChatTab("Group: " + name, pane);
+        } else if (chats.indexOfComponent(pane) < 0) {
+            addChatTab(tabNames.get(pane), pane);
         }
-        int port;
-        try {
-            port = Integer.parseInt(portField.getText().strip());
-        } catch (NumberFormatException exception) {
-            JOptionPane.showMessageDialog(this, "Port must be a number from 1 to 65535.");
-            portField.requestFocusInWindow();
-            return;
-        }
-        if (port < 1 || port > 65535) {
-            JOptionPane.showMessageDialog(this, "Port must be between 1 and 65535.");
-            portField.requestFocusInWindow();
-            return;
-        }
-        if (!observeOnly && name.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please enter a name.");
-            nameField.requestFocusInWindow();
-            return;
-        }
-
-        if (!observeOnly && name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
-            JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
-            nameField.requestFocusInWindow();
-            return;
-        }
-
-        connecting = true;
-        clearPrivateChats();
-        activeName = null;
-        activeId = null;
-        long generation = ++connectionGeneration;
-        setConnected(false);
-        appendMessage("Connecting...");
-
-        // 網路連線可能需要等待，放在背景執行緒以免視窗卡住。
-        Thread connectionThread = new Thread(() -> {
-            Socket newSocket = new Socket();
-            try {
-                ChatConnection.receive(newSocket, host, port, observeOnly, name, writer -> {
-                // Swing 元件只能在介面執行緒更新。
-                SwingUtilities.invokeLater(() -> {
-                    if (!isDisplayable() || generation != connectionGeneration) {
-                        closeSocket(newSocket);
-                        return;
-                    }
-                    socket = newSocket;
-                    output = writer;
-                    connecting = false;
-                    observing = true;
-                    joining = !observeOnly;
-                    setConnected(false);
-                    appendMessage(observeOnly ? "Connected. You can view online users." : "Joining chat...");
-                });
-                }, received -> {
-                    SwingUtilities.invokeLater(() -> {
-                        if (socket == newSocket) {
-                            if (received.startsWith(ChatProtocol.JOINED)) {
-                                activeId = received.substring(8);
-                                joining = false;
-                                observing = false;
-                                if (activeName != null && !activeName.equals(nameField.getText().strip())) {
-                                    clearPrivateChats();
-                                }
-                                activeName = nameField.getText().strip();
-                                setConnected(true);
-                                appendMessage("You joined the chat.");
-                            } else if (received.equals(ChatProtocol.ERROR_NAME_LENGTH)) {
-                                joining = false;
-                                observing = true;
-                                setConnected(false);
-                                JOptionPane.showMessageDialog(this, "Name must be at most 32 characters.");
-                            } else if (received.equals(ChatProtocol.ERROR_MESSAGE_LENGTH)) {
-                                JOptionPane.showMessageDialog(this, "Message must be at most 2000 characters.");
-                            } else if (received.equals(ChatProtocol.ERROR_NAME)) {
-                                joining = false;
-                                observing = true;
-                                setConnected(false);
-                                appendMessage("That name is already in use. Choose another name.");
-                            } else if (received.equals(ChatProtocol.ERROR_VERSION) || received.equals("@joined")) {
-                                appendMessage("Incompatible server version. Update both server and client.");
-                                closeConnection();
-                            } else if (received.startsWith(ChatProtocol.USERS)) {
-                                updateOnlineUsers(received.substring(7));
-                            } else if (received.startsWith(ChatProtocol.PRIVATE_MESSAGE) && !observing) {
-                                receivePrivate(received);
-                            } else if (received.startsWith(ChatProtocol.GROUP_MESSAGE) && !observing) {
-                                receiveGroup(received);
-                            } else if (received.startsWith(ChatProtocol.GROUP_ERROR)) {
-                                try {
-                                    JOptionPane.showMessageDialog(this, new String(Base64.getDecoder().decode(
-                                            received.substring(13)), StandardCharsets.UTF_8));
-                                } catch (IllegalArgumentException exception) {
-                                    appendMessage("Received an invalid notification.");
-                                }
-                            } else if (received.startsWith(ChatProtocol.NOTICE)) {
-                                try {
-                                    appendMessage(new String(Base64.getDecoder().decode(received.substring(8)),
-                                            StandardCharsets.UTF_8));
-                                } catch (IllegalArgumentException exception) {
-                                    appendMessage("Received an invalid notification.");
-                                }
-                            } else if (!observing) {
-                                appendMessage(received);
-                            }
-                        }
-                    });
-                });
-                SwingUtilities.invokeLater(() -> {
-                    if (generation == connectionGeneration)
-                        disconnected(newSocket, "Disconnected from the server.");
-                });
-            } catch (IOException exception) {
-                SwingUtilities.invokeLater(() -> {
-                    if (generation == connectionGeneration)
-                        disconnected(newSocket, "Connection closed or failed: " + exception.getMessage());
-                });
-            } finally {
-                closeSocket(newSocket);
-            }
-        }, "chat-connection");
-        connectionThread.setDaemon(true);
-        connectionThread.start();
+        JTextArea area = (JTextArea) pane.getViewport().getView();
+        area.append(text + "\n");
+        area.setCaretPosition(area.getDocument().getLength());
+        markUnread(pane);
     }
 
-    private void sendMessage() {
-        String message = inputField.getText();
-        if (output == null || message.isBlank()) {
+    void showPrivateMessage(String id, String peer, String text) {
+        PrivateChat chat = privateChats.get(id);
+        if (chat != null) chat = privateChat(id, chat.name);
+        else if (!peer.isEmpty()) chat = privateChat(id, peer);
+        if (chat == null) {
+            appendMessage(text);
             return;
         }
-        if (message.codePointCount(0, message.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
-            JOptionPane.showMessageDialog(this, "Message must be at most 2000 characters.");
-            return;
-        }
-        // 伺服器會把訊息廣播回來，因此此處不重複加到聊天區。
-        inputField.setText("");
-        if ("/quit".equalsIgnoreCase(message.strip())) {
-            leaveChat();
-        } else if (chats.getSelectedIndex() == 0) {
-            output.println(ChatProtocol.SAY + encode(message));
-        } else if (groupChats.containsValue(chats.getSelectedComponent())) {
-            String groupId = groupChats.entrySet().stream()
-                    .filter(entry -> entry.getValue() == chats.getSelectedComponent())
-                    .map(Map.Entry::getKey).findFirst().orElseThrow();
-            output.println(ChatProtocol.GROUP_SEND + groupId + ":" + encode(message));
-        } else {
-            String targetId = privateChats.entrySet().stream()
-                    .filter(entry -> entry.getValue().pane == chats.getSelectedComponent())
-                    .map(Map.Entry::getKey).findFirst().orElseThrow();
-            output.println(ChatProtocol.PRIVATE + targetId + ":" + encode(message));
-        }
+        chat.area.append(text + "\n");
+        chat.area.setCaretPosition(chat.area.getDocument().getLength());
+        markUnread(chat.pane);
     }
 
-    private void openSelectedChat() {
+    void showOnlineUsers(List<OnlineUser> users) {
         List<OnlineUser> selected = usersList.getSelectedValuesList();
-        if (selected.size() != 1) {
-            JOptionPane.showMessageDialog(this, "Select exactly one online user.");
-            return;
-        }
-        openPrivateChat(selected.get(0));
-    }
-
-    private void openPrivateChat(OnlineUser target) {
-        if (target.id.equals(activeId)) {
-            JOptionPane.showMessageDialog(this, "Select another user.");
-            return;
-        }
-        PrivateChat chat = privateChat(target.id, target.name);
-        chats.setSelectedComponent(chat.pane);
-        inputField.requestFocusInWindow();
-    }
-
-    private void createGroup() {
-        List<String> members = usersList.getSelectedValuesList().stream()
-                .filter(user -> !user.id.equals(activeId)).map(user -> user.id).collect(Collectors.toList());
-        if (members.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Select at least one other online user. Hold Ctrl to select more.");
-            return;
-        }
-        String name = JOptionPane.showInputDialog(this, "Group name:");
-        if (name == null)
-            return;
-        name = name.strip();
-        if (name.isEmpty() || name.length() > 80 || name.contains("\n") || name.contains("\r")) {
-            JOptionPane.showMessageDialog(this, "Enter a group name of up to 80 characters.");
-            return;
-        }
-        output.println(ChatProtocol.GROUP_CREATE + encode(name) + ":"
-                + String.join(",", members));
-    }
-
-    private void addGroupMembers() {
-        String groupId = groupChats.entrySet().stream()
-                .filter(entry -> entry.getValue() == chats.getSelectedComponent())
-                .map(Map.Entry::getKey).findFirst().orElse(null);
-        if (groupId == null) {
-            JOptionPane.showMessageDialog(this, "Select a group tab first.");
-            return;
-        }
-        List<String> members = usersList.getSelectedValuesList().stream()
-                .filter(user -> !user.id.equals(activeId)).map(user -> user.id).collect(Collectors.toList());
-        if (members.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Select at least one other online user. Hold Ctrl to select more.");
-            return;
-        }
-        output.println(ChatProtocol.GROUP_ADD + groupId + ":" + String.join(",", members));
-    }
-
-    private static String encode(String text) {
-        return ChatProtocol.encode(text);
-    }
-
-    private void receiveGroup(String message) {
-        String[] parts = message.substring(7).split(":", 3);
-        if (parts.length != 3)
-            return;
-        try {
-            String name = ChatProtocol.decode(parts[1]);
-            String text = ChatProtocol.decode(parts[2]);
-            JScrollPane pane = groupChats.get(parts[0]);
-            if (pane == null) {
-                JTextArea area = new JTextArea();
-                area.setEditable(false);
-                area.setLineWrap(true);
-                area.setWrapStyleWord(true);
-                pane = new JScrollPane(area);
-                groupChats.put(parts[0], pane);
-                addChatTab("Group: " + name, pane);
-            } else if (chats.indexOfComponent(pane) < 0) {
-                addChatTab(tabNames.get(pane), pane);
-            }
-            JTextArea area = (JTextArea) pane.getViewport().getView();
-            area.append(text + "\n");
-            area.setCaretPosition(area.getDocument().getLength());
-            markUnread(pane);
-        } catch (IllegalArgumentException exception) {
-            appendMessage("Received an invalid group message.");
+        onlineUsers.clear();
+        for (OnlineUser user : users) onlineUsers.addElement(user);
+        int[] indexes = selected.stream().mapToInt(onlineUsers::indexOf).filter(index -> index >= 0).toArray();
+        usersList.setSelectedIndices(indexes);
+        for (Map.Entry<String, PrivateChat> entry : privateChats.entrySet()) {
+            boolean online = users.stream().anyMatch(user -> user.id.equals(entry.getKey()));
+            JScrollPane pane = entry.getValue().pane;
+            tabNames.put(pane, entry.getValue().name + (online ? "" : " (offline)"));
+            refreshTabTitle(pane);
         }
     }
 
-    // 每位對象有獨立的文字區；收到私訊時也會自動建立分頁。
-    private PrivateChat privateChat(String peerId, String peerName) {
+    PrivateChat privateChat(String peerId, String peerName) {
         PrivateChat chat = privateChats.computeIfAbsent(peerId, id -> {
             JTextArea area = new JTextArea();
             area.setEditable(false);
@@ -730,75 +391,7 @@ public class ChatWindow extends JFrame {
         return chat;
     }
 
-    private void receivePrivate(String message) {
-        String[] parts = message.substring(4).split(":", 3);
-        if (parts.length != 3)
-            return;
-        try {
-            String peer = ChatProtocol.decode(parts[1]);
-            String text = ChatProtocol.decode(parts[2]);
-            PrivateChat chat = privateChats.get(parts[0]);
-            if (chat != null)
-                chat = privateChat(parts[0], chat.name);
-            else if (!peer.isEmpty())
-                chat = privateChat(parts[0], peer);
-            if (chat == null) {
-                appendMessage(text);
-                return;
-            }
-            chat.area.append(text + "\n");
-            chat.area.setCaretPosition(chat.area.getDocument().getLength());
-            markUnread(chat.pane);
-        } catch (IllegalArgumentException exception) {
-            appendMessage("Received an invalid private message.");
-        }
-    }
-
-    // 離開聊天但保留連線，以繼續接收線上名單。
-    private void leaveChat() {
-        if (output == null) {
-            return;
-        }
-        observing = true;
-        activeId = null;
-        output.println(ChatProtocol.LEAVE);
-        clearGroupChats();
-        setConnected(false);
-        inputField.setText("");
-        appendMessage("You left the chat.");
-    }
-
-    private void disconnected(Socket closedSocket, String message) {
-        if (socket == closedSocket || (socket == null && connecting)) {
-            socket = null;
-            output = null;
-            connecting = false;
-            joining = false;
-            observing = false;
-            activeId = null;
-            onlineUsers.clear();
-            setConnected(false);
-            if (isDisplayable()) {
-                appendMessage(message);
-            }
-        }
-    }
-
-    private void closeConnection() {
-        connectionGeneration++;
-        Socket oldSocket = socket;
-        socket = null;
-        output = null;
-        connecting = false;
-        joining = false;
-        observing = false;
-        activeId = null;
-        onlineUsers.clear();
-        setConnected(false);
-        closeSocket(oldSocket);
-    }
-
-    private void clearPrivateChats() {
+    void clearPrivateChats() {
         while (chats.getTabCount() > 1)
             chats.removeTabAt(1);
         privateChats.clear();
@@ -808,7 +401,7 @@ public class ChatWindow extends JFrame {
         tabLabels.clear();
     }
 
-    private void clearGroupChats() {
+    void clearGroupChats() {
         for (JScrollPane pane : groupChats.values()) {
             tabNames.remove(pane);
             unreadCounts.remove(pane);
@@ -818,7 +411,7 @@ public class ChatWindow extends JFrame {
         groupChats.clear();
     }
 
-    private void addChatTab(String name, JScrollPane pane) {
+    void addChatTab(String name, JScrollPane pane) {
         tabNames.put(pane, name);
         chats.addTab(name, pane);
         JPanel header = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 3, 0));
@@ -842,7 +435,7 @@ public class ChatWindow extends JFrame {
     }
 
     // 未選取的分頁收到訊息時累計；選取該分頁後歸零。
-    private void markUnread(Component pane) {
+    void markUnread(Component pane) {
         if (pane != chats.getSelectedComponent()) {
             unreadCounts.merge(pane, 1, Integer::sum);
             refreshTabTitle(pane);
@@ -855,7 +448,7 @@ public class ChatWindow extends JFrame {
         }
     }
 
-    private void refreshTabTitle(Component pane) {
+    void refreshTabTitle(Component pane) {
         int index = chats.indexOfComponent(pane);
         String name = tabNames.get(pane);
         if (index >= 0 && name != null) {
@@ -868,27 +461,18 @@ public class ChatWindow extends JFrame {
         }
     }
 
-    private static void closeSocket(Socket socket) {
-        if (socket != null) {
-            try {
-                socket.close();
-            } catch (IOException ignored) {
-            }
-        }
-    }
-
-    private void setConnected(boolean connected) {
+    void setConnected(boolean connected) {
         usersList.repaint();
-        hostField.setEnabled(!connected && !observing && !connecting && !startingServer && temporaryServer == null);
-        portField.setEnabled(!connected && !observing && !connecting && !startingServer && temporaryServer == null);
-        nameField.setEnabled(!connected && !connecting && !joining && !startingServer);
-        connectButton.setText(observing ? "Join chat" : "Connect");
-        connectButton.setEnabled(!connected && !connecting && !joining && !startingServer);
-        viewUsersButton.setText(observing ? "Disconnect" : "View online users");
-        viewUsersButton.setEnabled(!connected && !connecting && !joining && !startingServer);
-        hostButton.setText(temporaryServer == null ? "Start temporary server" : "Stop temporary server");
+        hostField.setEnabled(!connected && !model.observing && !model.connecting && !model.startingServer && model.temporaryServer == null);
+        portField.setEnabled(!connected && !model.observing && !model.connecting && !model.startingServer && model.temporaryServer == null);
+        nameField.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
+        connectButton.setText(model.observing ? "Join chat" : "Connect");
+        connectButton.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
+        viewUsersButton.setText(model.observing ? "Disconnect" : "View online users");
+        viewUsersButton.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
+        hostButton.setText(model.temporaryServer == null ? "Start temporary server" : "Stop temporary server");
         hostButton
-                .setEnabled(!startingServer && (temporaryServer != null || (!connected && !observing && !connecting)));
+                .setEnabled(!model.startingServer && (model.temporaryServer != null || (!connected && !model.observing && !model.connecting)));
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
         privateButton.setEnabled(connected);
@@ -897,40 +481,9 @@ public class ChatWindow extends JFrame {
         leaveButton.setEnabled(connected);
     }
 
-    private void appendMessage(String message) {
+    void appendMessage(String message) {
         chatArea.append(message + "\n");
         chatArea.setCaretPosition(chatArea.getDocument().getLength());
-    }
-
-    // 伺服器每次傳送完整名單，以最新名單取代舊內容。
-    private void updateOnlineUsers(String encodedNames) {
-        List<OnlineUser> selected = usersList.getSelectedValuesList();
-        onlineUsers.clear();
-        if (!encodedNames.isEmpty()) {
-            for (String encoded : encodedNames.split(",")) {
-                try {
-                    String[] parts = encoded.split("=", 2);
-                    if (parts.length != 2)
-                        throw new IllegalArgumentException();
-                    java.util.UUID.fromString(parts[0]);
-                    onlineUsers.addElement(new OnlineUser(parts[0],
-                            ChatProtocol.decode(parts[1])));
-                } catch (IllegalArgumentException exception) {
-                    appendMessage("Received an invalid online user list.");
-                    onlineUsers.clear();
-                    return;
-                }
-            }
-        }
-        int[] indexes = selected.stream().mapToInt(onlineUsers::indexOf).filter(index -> index >= 0).toArray();
-        usersList.setSelectedIndices(indexes);
-        for (Map.Entry<String, PrivateChat> entry : privateChats.entrySet()) {
-            boolean online = java.util.Collections.list(onlineUsers.elements()).stream()
-                    .anyMatch(user -> user.id.equals(entry.getKey()));
-            JScrollPane pane = entry.getValue().pane;
-            tabNames.put(pane, entry.getValue().name + (online ? "" : " (offline)"));
-            refreshTabTitle(pane);
-        }
     }
 
     public static void main(String[] args) {

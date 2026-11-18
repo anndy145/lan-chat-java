@@ -42,6 +42,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
+import javax.swing.JTextArea;
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.BadLocationException;
@@ -71,7 +72,7 @@ public class ChatWindow extends JFrame {
     final JButton hostButton = new JButton("Start temp server");
     final JButton themeButton = new JButton();
     final JTextPane chatArea = new JTextPane();
-    final JTextField inputField = new JTextField() {
+    final JTextArea inputField = new JTextArea(2, 0) {
         @Override
         protected void paintComponent(Graphics graphics) {
             super.paintComponent(graphics);
@@ -80,7 +81,7 @@ public class ChatWindow extends JFrame {
             hint.setColor(mutedColor());
             var metrics = hint.getFontMetrics(getFont());
             hint.drawString("Type a message...", getInsets().left,
-                    (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
+                    getInsets().top + metrics.getAscent());
             hint.dispose();
         }
     };
@@ -184,7 +185,15 @@ public class ChatWindow extends JFrame {
         groupMembersButton.addActionListener(event -> controller.showGroupMembers());
         leaveGroupButton.addActionListener(event -> controller.leaveSelectedGroup());
         leaveButton.addActionListener(event -> controller.leaveChat());
-        inputField.addActionListener(event -> controller.sendMessage());
+        inputField.getInputMap().put(javax.swing.KeyStroke.getKeyStroke("ENTER"), "send-message");
+        inputField.getInputMap().put(javax.swing.KeyStroke.getKeyStroke("shift ENTER"),
+                javax.swing.text.DefaultEditorKit.insertBreakAction);
+        inputField.getActionMap().put("send-message", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                if (sendButton.isEnabled()) controller.sendMessage();
+            }
+        });
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosed(WindowEvent event) {
@@ -331,7 +340,13 @@ public class ChatWindow extends JFrame {
 
         JPanel composer = new JPanel(new BorderLayout(8, 0));
         composer.add(imageButton, BorderLayout.WEST);
-        composer.add(inputField, BorderLayout.CENTER);
+        inputField.setLineWrap(true);
+        inputField.setWrapStyleWord(true);
+        inputField.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+        inputField.setToolTipText("Enter to send; Shift+Enter for a new line");
+        JScrollPane inputScroll = new JScrollPane(inputField);
+        inputScroll.setBorder(new ControlBorder(new Insets(1, 1, 1, 1)));
+        composer.add(inputScroll, BorderLayout.CENTER);
         composer.add(sendButton, BorderLayout.EAST);
         JPanel conversation = new JPanel(new BorderLayout(0, 10));
         conversation.add(groupActions, BorderLayout.NORTH);
@@ -474,7 +489,7 @@ public class ChatWindow extends JFrame {
                 }
             }
         }
-        for (JTextField field : List.of(hostField, portField, nameField, inputField)) {
+        for (JTextField field : List.of(hostField, portField, nameField)) {
             field.setBorder(new ControlBorder(new Insets(4, 7, 4, 7)));
         }
     }
@@ -774,7 +789,8 @@ public class ChatWindow extends JFrame {
     private SimpleAttributeSet textRole(String role) {
         var attributes = new SimpleAttributeSet();
         attributes.addAttribute(TRANSCRIPT_ROLE, role);
-        if (role.equals("body")) {
+        if (role.equals("body") || role.equals("braille")) {
+            if (role.equals("braille")) StyleConstants.setFontFamily(attributes, java.awt.Font.MONOSPACED);
             StyleConstants.setForeground(attributes, darkMode ? new Color(0xE4E6EB) : new Color(0x20242C));
         } else if (role.equals("sender")) {
             StyleConstants.setBold(attributes, true);
@@ -814,7 +830,9 @@ public class ChatWindow extends JFrame {
                 document.setParagraphAttributes(start, document.getLength() - start - 1, heading, true);
                 start = document.getLength();
                 StyleConstants.setSpaceAbove(paragraph, 0);
-                document.insertString(start, content.substring(separator + 2) + "\n", textRole("body"));
+                String body = content.substring(separator + 2);
+                boolean braille = body.codePoints().anyMatch(codePoint -> codePoint >= 0x2800 && codePoint <= 0x28FF);
+                document.insertString(start, body + "\n", textRole(braille ? "braille" : "body"));
             } else {
                 String message = timestampPresent ? timed.group(1) + "  " + content : content;
                 document.insertString(start, message + "\n", textRole(notice ? "notice" : "body"));

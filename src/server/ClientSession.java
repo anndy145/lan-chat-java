@@ -95,8 +95,8 @@ class ClientSession implements Runnable {
                     }
                 } else if (line.startsWith(ChatProtocol.SAY) && isActive()) {
                     try {
-                        String text = new String(Base64.getDecoder().decode(line.substring(ChatProtocol.SAY.length())), StandardCharsets.UTF_8);
-                        if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
+                        String text = decodeMessage(line.substring(ChatProtocol.SAY.length()));
+                        if (!text.isBlank()) {
                             server.sendPublic(this, text);
                         }
                     } catch (IllegalArgumentException exception) {
@@ -107,8 +107,8 @@ class ClientSession implements Runnable {
                     if (parts.length == 2) {
                         try {
                             String target = parts[0];
-                            String text = ChatProtocol.decode(parts[1]);
-                            if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
+                            String text = decodeMessage(parts[1]);
+                            if (!text.isBlank()) {
                                 server.sendPrivate(this, target, text);
                             }
                         } catch (IllegalArgumentException exception) {
@@ -141,8 +141,8 @@ class ClientSession implements Runnable {
                     String[] parts = line.substring(ChatProtocol.GROUP_SEND.length()).split(":", 2);
                     try {
                         if (parts.length == 2) {
-                            String text = ChatProtocol.decode(parts[1]);
-                            if (!text.isBlank() && !text.contains("\n") && !text.contains("\r")) {
+                            String text = decodeMessage(parts[1]);
+                            if (!text.isBlank()) {
                                 server.sendGroup(this, parts[0], text);
                             }
                         }
@@ -263,6 +263,10 @@ class ClientSession implements Runnable {
 
     void setActive(boolean active) {
         this.active = active;
+    }
+
+    private static String decodeMessage(String encoded) {
+        return ChatProtocol.decode(encoded).replace("\r\n", "\n").replace('\r', '\n');
     }
 
     private static String cleanName(String requestedName) {

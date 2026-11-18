@@ -58,6 +58,22 @@ public class GroupMembershipRegression {
                 String group = alice.until("@group:").split(":", 3)[1];
                 bob.until("@group:" + group + ":");
 
+                String art = "\u2800\u28FF\u28F7\n\u2800\u2811\u2800";
+                String windowsArt = art.replace("\n", "\r\n");
+                alice.output.println("@say:" + encode(windowsArt));
+                if (!decode(bob.until("@notice:").substring(8)).endsWith("Alice: " + art))
+                    throw new AssertionError("Lobby message lost multiline layout");
+
+                alice.output.println("@private:" + bobId + ":" + encode(windowsArt));
+                if (!groupText(bob.until("@pm:")).endsWith("Alice: " + art))
+                    throw new AssertionError("Private message lost multiline layout");
+
+                alice.output.println("@group-send:" + group + ":" + encode(windowsArt));
+                if (!groupText(bob.until("@group:" + group + ":")).endsWith("Alice: " + art)
+                        || !groupText(alice.until("@group:" + group + ":")).endsWith("Alice: " + art))
+                    throw new AssertionError("Group message lost multiline layout");
+
+
                 alice.output.println("@group-members-request:" + group);
                 String[] list = alice.until("@group-members:" + group + ":").split(":", 4);
                 if (!decode(list[2]).equals("Team") || !list[3].equals(encode("Alice") + "," + encode("Bob")))

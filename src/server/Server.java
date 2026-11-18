@@ -217,7 +217,9 @@ public class Server implements AutoCloseable {
         String recipients = clients.stream().filter(ClientSession::isActive)
                 .filter(client -> client != sender).map(ClientSession::getName).sorted()
                 .collect(Collectors.joining(", "));
-        broadcast(timestamped(sender.getName() + ": " + text));
+        String message = timestamped(sender.getName() + ": " + text);
+        // Existing clients decode this display frame without treating embedded newlines as new frames.
+        broadcast(text.indexOf('\n') >= 0 ? ChatProtocol.NOTICE + encode(message) : message);
         audit(sender.getName(), "public [" + recipients + "]");
     }
 

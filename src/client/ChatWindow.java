@@ -162,8 +162,8 @@ public class ChatWindow extends JFrame {
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
         inputPanel.add(inputField, BorderLayout.CENTER);
         JPanel buttonsPanel = new JPanel();
+        inputPanel.add(imageButton, BorderLayout.WEST);
         buttonsPanel.add(sendButton);
-        buttonsPanel.add(imageButton);
         buttonsPanel.add(leaveButton);
         inputPanel.add(buttonsPanel, BorderLayout.EAST);
         int buttonWidth = Math.max(

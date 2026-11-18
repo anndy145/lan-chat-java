@@ -54,10 +54,12 @@ import java.util.List;
 
 public class ChatWindow extends JFrame {
     private static final int BUTTON_HEIGHT = 34;
+    private static final String CONNECT_LABEL = "Connect";
+    private static final String JOIN_LABEL = "Join chat";
     final JTextField hostField = new JTextField("127.0.0.1");
     final JTextField portField = new JTextField("5487");
     final JTextField nameField = new JTextField();
-    final JButton connectButton = new JButton("Connect");
+    final JButton connectButton = new JButton(CONNECT_LABEL);
     final JButton viewUsersButton = new JButton("View online users");
     final JButton hostButton = new JButton("Start temp server");
     final JButton themeButton = new JButton("Dark mode");
@@ -169,9 +171,8 @@ public class ChatWindow extends JFrame {
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
         inputPanel.add(inputField, BorderLayout.CENTER);
         inputPanel.add(imageButton, BorderLayout.WEST);
-        JPanel buttonsPanel = new JPanel(new GridLayout(1, 2, 5, 0));
+        JPanel buttonsPanel = new JPanel(new GridLayout(1, 1));
         buttonsPanel.add(sendButton);
-        buttonsPanel.add(leaveButton);
         JPanel bottomRow = new JPanel(new BorderLayout());
         bottomRow.add(inputPanel, BorderLayout.CENTER);
         bottomRow.add(buttonsPanel, BorderLayout.EAST);
@@ -183,12 +184,15 @@ public class ChatWindow extends JFrame {
         int sidebarWidth = buttonWidth;
         buttonsPanel.setPreferredSize(new java.awt.Dimension(sidebarWidth, BUTTON_HEIGHT));
         add(connectionPanel, BorderLayout.NORTH);
-        add(chats, BorderLayout.CENTER);
         JPanel usersPanel = new JPanel(new BorderLayout());
-        usersPanel.setPreferredSize(new java.awt.Dimension(sidebarWidth, 0));
         JPanel usersHeader = new JPanel(new BorderLayout());
         usersHeader.add(viewUsersButton, BorderLayout.CENTER);
-        usersPanel.add(usersHeader, BorderLayout.NORTH);
+        JPanel actionsPanel = new JPanel(new BorderLayout());
+        actionsPanel.setPreferredSize(new java.awt.Dimension(sidebarWidth, 0));
+        JPanel topActions = new JPanel(new BorderLayout(0, 4));
+        topActions.add(usersHeader, BorderLayout.NORTH);
+        topActions.add(leaveButton, BorderLayout.SOUTH);
+        actionsPanel.add(topActions, BorderLayout.NORTH);
         // 根據實際 Lobby 分頁尺寸調整右側按鈕，兼顧字型與縮放。
         chats.addComponentListener(new ComponentAdapter() {
             @Override
@@ -225,7 +229,7 @@ public class ChatWindow extends JFrame {
                 return this;
             }
         });
-        usersScroll.setPreferredSize(new java.awt.Dimension(140, 0));
+        usersScroll.setPreferredSize(new java.awt.Dimension(sidebarWidth, 0));
         usersPanel.add(usersScroll, BorderLayout.CENTER);
         JPanel userButtons = new JPanel(new GridLayout(5, 1));
         userButtons.add(privateButton);
@@ -233,9 +237,13 @@ public class ChatWindow extends JFrame {
         userButtons.add(addMembersButton);
         userButtons.add(groupMembersButton);
         userButtons.add(leaveGroupButton);
-        usersPanel.add(userButtons, BorderLayout.SOUTH);
-        add(usersPanel, BorderLayout.EAST);
-        add(bottomRow, BorderLayout.SOUTH);
+        actionsPanel.add(userButtons, BorderLayout.SOUTH);
+        JPanel chatPanel = new JPanel(new BorderLayout());
+        chatPanel.add(chats, BorderLayout.CENTER);
+        chatPanel.add(actionsPanel, BorderLayout.EAST);
+        chatPanel.add(bottomRow, BorderLayout.SOUTH);
+        add(usersPanel, BorderLayout.WEST);
+        add(chatPanel, BorderLayout.CENTER);
         applyTheme();
         setConnected(false);
 
@@ -447,6 +455,17 @@ public class ChatWindow extends JFrame {
 
     private void styleMainButton(JButton button, boolean primary) {
         styleButton(button, primary);
+        if (button == connectButton) {
+            // 預留兩種連線狀態中較長的文字寬度。
+            button.setPreferredSize(null);
+            java.awt.FontMetrics metrics = button.getFontMetrics(button.getFont());
+            int labelWidth = Math.max(metrics.stringWidth(CONNECT_LABEL), metrics.stringWidth(JOIN_LABEL));
+            java.awt.Dimension size = button.getPreferredSize();
+            size.width += labelWidth - metrics.stringWidth(button.getText());
+            size.height = BUTTON_HEIGHT;
+            button.setPreferredSize(size);
+            return;
+        }
         java.awt.Dimension size = button.getPreferredSize();
         button.setPreferredSize(new java.awt.Dimension(size.width, BUTTON_HEIGHT));
     }
@@ -821,7 +840,7 @@ public class ChatWindow extends JFrame {
         portField.setEnabled(!connected && !model.observing && !model.connecting && !model.startingServer
                 && model.temporaryServer == null);
         nameField.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
-        connectButton.setText(model.observing ? "Join chat" : "Connect");
+        connectButton.setText(model.observing ? JOIN_LABEL : CONNECT_LABEL);
         connectButton.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
         viewUsersButton.setText(model.observing ? "Disconnect" : "View online users");
         viewUsersButton.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);

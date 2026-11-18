@@ -13,6 +13,10 @@ public final class ChatProtocol {
     public static final String SAY = "@say:";
     public static final String PRIVATE = "@private:";
     public static final String GROUP_SEND = "@group-send:";
+    public static final String GROUP_MEMBERS_REQUEST = "@group-members-request:";
+    public static final String GROUP_MEMBERS = "@group-members:";
+    public static final String GROUP_LEAVE = "@group-leave:";
+    public static final String GROUP_LEFT = "@group-left:";
     public static final String GROUP_CREATE = "@group-create:";
     public static final String GROUP_ADD = "@group-add:";
     public static final String JOINED = "@joined:";

@@ -112,6 +112,10 @@ class ClientSession implements Runnable {
                     } else {
                         send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
                     }
+                } else if (line.startsWith(ChatProtocol.GROUP_MEMBERS_REQUEST) && isActive()) {
+                    server.sendGroupMembers(this, line.substring(ChatProtocol.GROUP_MEMBERS_REQUEST.length()));
+                } else if (line.startsWith(ChatProtocol.GROUP_LEAVE) && isActive()) {
+                    server.leaveGroup(this, line.substring(ChatProtocol.GROUP_LEAVE.length()));
                 } else if (line.startsWith(ChatProtocol.GROUP_SEND) && isActive()) {
                     String[] parts = line.substring(ChatProtocol.GROUP_SEND.length()).split(":", 2);
                     try {

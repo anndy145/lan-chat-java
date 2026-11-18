@@ -54,6 +54,8 @@ GUI 在背景執行緒透過 `ChatConnection` 建立連線並讀取 Socket，再
 | `@group-create:<b64(群組名稱)>:<成員 ID>,...` | 建立群組。建立者會自動成為成員。 |
 | `@group-add:<群組 ID>:<成員 ID>,...` | 由群組成員邀請線上使用者。 |
 | `@group-send:<群組 ID>:<b64(訊息)>` | 傳送群組訊息。 |
+| `@group-members-request:<群組 ID>` | 查詢群組成員，僅限成員使用。 |
+| `@group-leave:<群組 ID>` | 主動退出指定群組。 |
 
 Server 也將未符合控制訊息格式的非空白行視為公開訊息。目前 Client 使用 `@say:` 傳送公開文字。命令列 Client 會攔截未知指令；公開訊息要以斜線開頭時，使用者可輸入兩個斜線。
 
@@ -69,7 +71,9 @@ Server 也將未符合控制訊息格式的非空白行視為公開訊息。目�
 | `@users:<ID>=<b64(暱稱)>,...` | 完整的線上使用者名單。 |
 | `@pm:<對象 ID>:<b64(對象)>:<b64(顯示文字)>` | 私訊內容或私訊錯誤提示。 |
 | `@group:<群組 ID>:<b64(群組名稱)>:<b64(顯示文字)>` | 群組建立、成員加入通知或群組訊息。 |
-| `@group-error:<b64(提示文字)>` | 邀請群組成員失敗的提示。 |
+| `@group-error:<b64(提示文字)>` | 群組操作失敗的提示。 |
+| `@group-members:<群組 ID>:<b64(群組名稱)>:<b64(暱稱)>,...` | 回傳群組成員名單。 |
+| `@group-left:<群組 ID>` | 確認使用者已退出群組。 |
 | `@notice:<b64(提示文字)>` | 一般錯誤或狀態提示。 |
 | 一般文字 | 公開聊天訊息或加入、離開通知。 |
 
@@ -81,7 +85,7 @@ Server 也將未符合控制訊息格式的非空白行視為公開訊息。目�
 
 Server 以 UUID 區分群組，只接受成員發送群組訊息，並只轉送給該群組的成員。群組名稱不可空白，最長為 80 個 Java 字元。群組成員可以邀請其他線上使用者；新成員收到加入通知及之後的訊息，不會收到加入前的紀錄。
 
-群組與其成員只保存在 Server 記憶體。使用者離開聊天或斷線時會離開群組；沒有成員的群組會被移除。Server 重啟後群組不會保留。Client 的聊天紀錄沒有寫入檔案，建立新的 Server 連線會清除舊的私訊及群組分頁。
+群組與其成員只保存在 Server 記憶體。使用者離開聊天或斷線時會離開群組；沒有成員的群組會被移除。主動退出、離開聊天室或斷線時，Server 會通知其餘群組成員。Server 重啟後群組不會保留。Client 的聊天紀錄沒有寫入檔案，建立新的 Server 連線會清除舊的私訊及群組分頁。
 
 ## Server 紀錄
 
@@ -102,7 +106,8 @@ Server 主控台顯示使用者加入、主動離開或連線中斷的時間與�
 `IdentityRegression` 驗證臨時 ID、私訊及群組流程。`ClientCommandRegression` 啟動命令列 Client，驗證指令、私訊與公開訊息隔離。在 Windows 專案根目錄執行：
 
 ```cmd
-javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java tests\IdentityRegression.java tests\ClientCommandRegression.java
+javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java tests\IdentityRegression.java tests\ClientCommandRegression.java tests\GroupMembershipRegression.java
 java -cp out IdentityRegression
 java -cp out ClientCommandRegression
+java -cp out GroupMembershipRegression
 ```

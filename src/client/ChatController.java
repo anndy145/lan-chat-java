@@ -212,6 +212,12 @@ final class ChatController {
                                 receivePrivate(received);
                             } else if (received.startsWith(ChatProtocol.GROUP_MESSAGE) && !model.observing) {
                                 receiveGroup(received);
+                            } else if (received.startsWith(ChatProtocol.GROUP_MEMBERS) && !model.observing) {
+                                receiveGroupMembers(received);
+                            } else if (received.startsWith(ChatProtocol.GROUP_LEFT)) {
+                                String id = received.substring(ChatProtocol.GROUP_LEFT.length());
+                                view.removeGroupChat(id);
+                                view.appendMessage("You left the group.");
                             } else if (received.startsWith(ChatProtocol.GROUP_ERROR)) {
                                 try {
                                     JOptionPane.showMessageDialog(view, new String(Base64.getDecoder().decode(
@@ -330,6 +336,46 @@ final class ChatController {
             return;
         }
         model.output.println(ChatProtocol.GROUP_ADD + groupId + ":" + String.join(",", members));
+    }
+
+    private String selectedGroupId() {
+        return view.groupChats.entrySet().stream()
+                .filter(entry -> entry.getValue() == view.chats.getSelectedComponent())
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+    }
+
+    void showGroupMembers() {
+        String id = selectedGroupId();
+        if (id == null) {
+            JOptionPane.showMessageDialog(view, "Select a group tab first.");
+        } else if (model.output != null) {
+            model.output.println(ChatProtocol.GROUP_MEMBERS_REQUEST + id);
+        }
+    }
+
+    void leaveSelectedGroup() {
+        String id = selectedGroupId();
+        if (id == null) {
+            JOptionPane.showMessageDialog(view, "Select a group tab first.");
+        } else if (model.output != null) {
+            model.output.println(ChatProtocol.GROUP_LEAVE + id);
+        }
+    }
+
+    private void receiveGroupMembers(String message) {
+        String[] parts = message.substring(ChatProtocol.GROUP_MEMBERS.length()).split(":", 3);
+        if (parts.length != 3 || !view.groupChats.containsKey(parts[0])) return;
+        try {
+            String title = ChatProtocol.decode(parts[1]);
+            List<String> names = new java.util.ArrayList<>();
+            if (!parts[2].isEmpty()) {
+                for (String encoded : parts[2].split(",")) names.add(ChatProtocol.decode(encoded));
+            }
+            JOptionPane.showMessageDialog(view, String.join("\n", names),
+                    "Group members: " + title, JOptionPane.INFORMATION_MESSAGE);
+        } catch (IllegalArgumentException exception) {
+            view.appendMessage("Received an invalid group member list.");
+        }
     }
 
     private static String encode(String text) {

@@ -34,7 +34,7 @@ java -cp "out;resources" client.ChatWindow
 
 若沒有現成的 Server，可在 Client 輸入連接埠後按 `Start temporary server`，再輸入暱稱並按 `Connect`。按 `Stop temporary server` 或關閉主機視窗會中斷所有連線。
 
-雙擊線上使用者可開啟私訊。選取線上使用者並按 `Create group` 可建立群組；要邀請新成員時，先選取群組分頁，再選擇使用者並按 `Add members`。按住 Ctrl 可選取多人。新成員只會看到加入後的群組訊息。
+雙擊線上使用者可開啟私訊。選取線上使用者並按 `Create group` 可建立群組；要邀請新成員時，先選取群組分頁，再選擇使用者並按 `Add members`。按住 Ctrl 可選取多人。新成員只會看到加入後的群組訊息。選取群組分頁後，可按 `Group members` 查看成員，或按 `Leave group` 退出；關閉分頁只會隱藏分頁。成員退出或斷線時，其餘成員會收到通知。
 
 按 `View online users` 可在不加入聊天的情況下查看名單。加入聊天後按 `Leave` 可離開聊天並繼續查看名單；按 `Dark mode` 或 `Light mode` 可切換主題。
 
@@ -61,6 +61,8 @@ java -cp out client.Client 127.0.0.1 5487 --observe
 | `/leave`                  | 離開聊天，繼續查看線上名單。                                   |
 | `/msg <暱稱> <訊息>`      | 傳送私訊。暱稱有空白時請加引號，例如 `/msg "Andy Chen" 你好`。 |
 | `/group <群組 ID> <訊息>` | 向已加入的群組傳送訊息。群組 ID 顯示在收到的群組通知中。       |
+| `/group-members <群組 ID>` | 查看群組成員。 |
+| `/group-leave <群組 ID>` | 退出群組。 |
 | `/quit`                   | 斷線並結束 Client。                                            |
 
 一般文字會送到 Lobby。若公開訊息要以 `/` 開頭，請輸入兩個斜線，例如 `//hello` 會送出 `/hello`。命令列使用者可受邀加入群組，但不能建立群組或邀請成員。

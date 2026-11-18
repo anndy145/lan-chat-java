@@ -275,6 +275,34 @@ public class Server implements AutoCloseable {
         group.members.forEach(member -> member.send(announcement));
     }
 
+    public synchronized void sendGroupMembers(ClientSession requester, String id) {
+        ChatGroup group = groups.get(id);
+        if (!requester.isActive() || group == null || !group.members.contains(requester)) {
+            requester.send(ChatProtocol.GROUP_ERROR + encode("You are no longer a member of this group."));
+            return;
+        }
+        String names = group.members.stream().map(ClientSession::getName).sorted()
+                .map(ChatProtocol::encode).collect(Collectors.joining(","));
+        requester.send(ChatProtocol.GROUP_MEMBERS + id + ":" + encode(group.name) + ":" + names);
+    }
+
+    public synchronized void leaveGroup(ClientSession member, String id) {
+        ChatGroup group = groups.get(id);
+        if (!member.isActive() || group == null || !group.members.remove(member)) {
+            member.send(ChatProtocol.GROUP_ERROR + encode("You are no longer a member of this group."));
+            return;
+        }
+        member.send(ChatProtocol.GROUP_LEFT + id);
+        notifyGroupDeparture(id, group, member.getName());
+        if (group.members.isEmpty()) groups.remove(id);
+    }
+
+    private void notifyGroupDeparture(String id, ChatGroup group, String name) {
+        String announcement = ChatProtocol.GROUP_MESSAGE + id + ":" + encode(group.name) + ":"
+                + encode(timestamped(name + " left the group."));
+        group.members.forEach(member -> member.send(announcement));
+    }
+
     public synchronized void sendGroup(ClientSession sender, String id, String text) {
         if (text.codePointCount(0, text.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
             sender.send(ChatProtocol.ERROR_MESSAGE_LENGTH);
@@ -308,8 +336,15 @@ public class Server implements AutoCloseable {
     }
 
     private void removeFromGroups(ClientSession session) {
-        groups.values().forEach(group -> group.members.remove(session));
-        groups.values().removeIf(group -> group.members.isEmpty());
+        java.util.Iterator<Map.Entry<String, ChatGroup>> iterator = groups.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, ChatGroup> entry = iterator.next();
+            ChatGroup group = entry.getValue();
+            if (group.members.remove(session)) {
+                notifyGroupDeparture(entry.getKey(), group, session.getName());
+                if (group.members.isEmpty()) iterator.remove();
+            }
+        }
     }
 
     private void sendPrivateLine(ClientSession recipient, String peerId, String peer, String text) {

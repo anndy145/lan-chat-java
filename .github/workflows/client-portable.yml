@@ -54,11 +54,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out/test-classes | Out-Null
-          javac -encoding UTF-8 -cp out/classes -d out/test-classes tests/IdentityRegression.java tests/ClientCommandRegression.java
+          javac -encoding UTF-8 -cp out/classes -d out/test-classes tests/IdentityRegression.java tests/ClientCommandRegression.java tests/GroupMembershipRegression.java
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           java -cp "out/classes;out/test-classes" IdentityRegression
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           java -cp "out/classes;out/test-classes" ClientCommandRegression
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java -cp "out/classes;out/test-classes" GroupMembershipRegression
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create portable application

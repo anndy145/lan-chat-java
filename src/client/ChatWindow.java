@@ -55,6 +55,8 @@ public class ChatWindow extends JFrame {
     final JButton privateButton = new JButton("Open private chat");
     final JButton createGroupButton = new JButton("Create group");
     final JButton addMembersButton = new JButton("Add members");
+    final JButton groupMembersButton = new JButton("Group members");
+    final JButton leaveGroupButton = new JButton("Leave group");
     final DefaultListModel<OnlineUser> onlineUsers = new DefaultListModel<>();
     final JList<OnlineUser> usersList = new JList<>(onlineUsers);
     final JTabbedPane chats = new JTabbedPane();
@@ -203,10 +205,12 @@ public class ChatWindow extends JFrame {
         });
         usersScroll.setPreferredSize(new java.awt.Dimension(140, 0));
         usersPanel.add(usersScroll, BorderLayout.CENTER);
-        JPanel userButtons = new JPanel(new GridLayout(3, 1));
+        JPanel userButtons = new JPanel(new GridLayout(5, 1));
         userButtons.add(privateButton);
         userButtons.add(createGroupButton);
         userButtons.add(addMembersButton);
+        userButtons.add(groupMembersButton);
+        userButtons.add(leaveGroupButton);
         usersPanel.add(userButtons, BorderLayout.SOUTH);
         add(usersPanel, BorderLayout.EAST);
         add(inputPanel, BorderLayout.SOUTH);
@@ -220,6 +224,8 @@ public class ChatWindow extends JFrame {
         privateButton.addActionListener(event -> controller.openSelectedChat());
         createGroupButton.addActionListener(event -> controller.createGroup());
         addMembersButton.addActionListener(event -> controller.addGroupMembers());
+        groupMembersButton.addActionListener(event -> controller.showGroupMembers());
+        leaveGroupButton.addActionListener(event -> controller.leaveSelectedGroup());
         leaveButton.addActionListener(event -> controller.leaveChat());
         inputField.addActionListener(event -> controller.sendMessage());
         addWindowListener(new WindowAdapter() {
@@ -401,6 +407,16 @@ public class ChatWindow extends JFrame {
         tabLabels.clear();
     }
 
+    void removeGroupChat(String id) {
+        JScrollPane pane = groupChats.remove(id);
+        if (pane != null) {
+            tabNames.remove(pane);
+            unreadCounts.remove(pane);
+            tabLabels.remove(pane);
+            chats.remove(pane);
+        }
+    }
+
     void clearGroupChats() {
         for (JScrollPane pane : groupChats.values()) {
             tabNames.remove(pane);
@@ -478,6 +494,8 @@ public class ChatWindow extends JFrame {
         privateButton.setEnabled(connected);
         createGroupButton.setEnabled(connected);
         addMembersButton.setEnabled(connected);
+        groupMembersButton.setEnabled(connected);
+        leaveGroupButton.setEnabled(connected);
         leaveButton.setEnabled(connected);
     }
 

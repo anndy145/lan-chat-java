@@ -64,6 +64,24 @@ public class ClientCommandRegression {
                     String text = new String(Base64.getDecoder().decode(line.split(":", 4)[3]), StandardCharsets.UTF_8);
                     if (!text.endsWith("Alice: hello world")) throw new AssertionError("Wrong message: " + text);
                     expect("You: hello world");
+
+                    String aliceId = line.split(":", 4)[1];
+                    output.println("@group-create:" + Base64.getEncoder()
+                            .encodeToString("Team".getBytes(StandardCharsets.UTF_8)) + ":" + aliceId);
+                    String groupLine;
+                    do { groupLine = input.readLine(); } while (groupLine != null && !groupLine.startsWith("@group:"));
+                    if (groupLine == null) throw new AssertionError("Group missing");
+                    String groupId = groupLine.split(":", 3)[1];
+                    expect("[Group Team / " + groupId + "]");
+                    commands.println("/group-members " + groupId);
+                    expect("[Group members Team / " + groupId + "] Alice, Andy Chen");
+                    commands.println("/group-leave " + groupId);
+                    expect("You left group " + groupId);
+                    do { groupLine = input.readLine(); }
+                    while (groupLine != null && !groupLine.startsWith("@group:" + groupId + ":"));
+                    if (groupLine == null || !new String(Base64.getDecoder().decode(groupLine.split(":", 4)[3]),
+                            StandardCharsets.UTF_8).contains("Alice left the group"))
+                        throw new AssertionError("Missing group leave notification");
                     commands.println("/msgBob secret"); expect("Unknown command");
                     commands.println("/group"); expect("Usage: /group");
                     commands.println("//hello");

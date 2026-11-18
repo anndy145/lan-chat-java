@@ -130,6 +130,15 @@ public class Client {
         }
         if (command.equals("/msg")) sendPrivateMessage("/msg " + arguments, output, state);
         else if (command.equals("/group")) sendGroupMessage(arguments, output);
+        else if (command.equals("/group-members") || command.equals("/group-leave")) {
+            String id = arguments.strip();
+            if (id.isEmpty() || id.chars().anyMatch(Character::isWhitespace)) {
+                System.out.println("Usage: " + command + " <group-id>");
+            } else {
+                output.println((command.equals("/group-members")
+                        ? ChatProtocol.GROUP_MEMBERS_REQUEST : ChatProtocol.GROUP_LEAVE) + id);
+            }
+        }
         else System.out.println("Unknown command or invalid arguments. Type /help for usage.");
         return true;
     }
@@ -200,6 +209,8 @@ public class Client {
         System.out.println("  /msg <name> <message>    Send a private message (chat mode).");
         System.out.println("                           Quote names with spaces: /msg \"Andy Chen\" Hello there");
         System.out.println("  /group <id> <message>    Send to a group you joined (chat mode).");
+        System.out.println("  /group-members <id>      Show group members.");
+        System.out.println("  /group-leave <id>        Leave a group.");
         System.out.println("  /quit                    Disconnect and exit.");
         System.out.println("  Other text               Send to the lobby (chat mode; use // for a leading /).");
     }
@@ -289,6 +300,27 @@ public class Client {
                                 new String(Base64.getDecoder().decode(message.substring(8)), StandardCharsets.UTF_8));
                     } catch (IllegalArgumentException exception) {
                         System.out.println("Invalid notification received.");
+                    }
+                } else if (message.startsWith(ChatProtocol.GROUP_MEMBERS)) {
+                    String[] parts = message.substring(ChatProtocol.GROUP_MEMBERS.length()).split(":", 3);
+                    try {
+                        if (parts.length != 3) throw new IllegalArgumentException();
+                        java.util.List<String> names = new java.util.ArrayList<>();
+                        if (!parts[2].isEmpty()) {
+                            for (String encoded : parts[2].split(",")) names.add(ChatProtocol.decode(encoded));
+                        }
+                        System.out.println("[Group members " + ChatProtocol.decode(parts[1]) + " / "
+                                + parts[0] + "] " + String.join(", ", names));
+                    } catch (IllegalArgumentException exception) {
+                        System.out.println("Invalid group member list received.");
+                    }
+                } else if (message.startsWith(ChatProtocol.GROUP_LEFT)) {
+                    System.out.println("You left group " + message.substring(ChatProtocol.GROUP_LEFT.length()) + ".");
+                } else if (message.startsWith(ChatProtocol.GROUP_ERROR)) {
+                    try {
+                        System.out.println(ChatProtocol.decode(message.substring(ChatProtocol.GROUP_ERROR.length())));
+                    } catch (IllegalArgumentException exception) {
+                        System.out.println("Invalid group error received.");
                     }
                 } else if (message.startsWith(ChatProtocol.GROUP_MESSAGE)) {
                     String[] parts = message.substring(7).split(":", 3);

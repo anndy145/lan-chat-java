@@ -85,8 +85,8 @@ public class ChatWindow extends JFrame {
             "Button.select", "Button.disabledText", "Button.focus", "Button.gradient", "TextField.background",
             "TextField.foreground", "TextField.inactiveBackground", "TextField.inactiveForeground",
             "TextField.caretForeground", "TextField.selectionBackground", "TextField.selectionForeground",
-            "TextArea.background", "TextArea.foreground", "TextArea.caretForeground",
-            "TextArea.selectionBackground", "TextArea.selectionForeground", "List.background", "List.foreground",
+            "TextArea.background", "TextPane.background", "TextArea.foreground", "TextPane.foreground", "TextArea.caretForeground", "TextPane.caretForeground",
+            "TextArea.selectionBackground", "TextPane.selectionBackground", "TextArea.selectionForeground", "TextPane.selectionForeground", "List.background", "List.foreground",
             "List.selectionBackground", "List.selectionForeground", "TabbedPane.background", "TabbedPane.foreground",
             "TabbedPane.selected", "TabbedPane.contentAreaColor", "TabbedPane.unselectedBackground",
             "TabbedPane.focus", "TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow",
@@ -313,17 +313,17 @@ public class ChatWindow extends JFrame {
                     "info", "ToolTip.background", "nimbusBase" })
                 UIManager.put(key, surface);
             for (String key : new String[] { "text", "TextField.background", "TextField.inactiveBackground",
-                    "TextArea.background", "List.background", "nimbusLightBackground" })
+                    "TextArea.background", "TextPane.background", "List.background", "nimbusLightBackground" })
                 UIManager.put(key, input);
             for (String key : new String[] { "Label.foreground", "Button.foreground", "TextField.foreground",
-                    "TextField.caretForeground", "TextArea.foreground", "TextArea.caretForeground", "List.foreground",
+                    "TextField.caretForeground", "TextArea.foreground", "TextPane.foreground", "TextArea.caretForeground", "TextPane.caretForeground", "List.foreground",
                     "TabbedPane.foreground", "OptionPane.messageForeground", "ToolTip.foreground",
-                    "TextField.selectionForeground", "TextArea.selectionForeground", "List.selectionForeground" }) {
+                    "TextField.selectionForeground", "TextArea.selectionForeground", "TextPane.selectionForeground", "List.selectionForeground" }) {
                 UIManager.put(key, text);
             }
             for (String key : new String[] { "Button.disabledText", "TextField.inactiveForeground" })
                 UIManager.put(key, disabled);
-            for (String key : new String[] { "TextField.selectionBackground", "TextArea.selectionBackground",
+            for (String key : new String[] { "TextField.selectionBackground", "TextArea.selectionBackground", "TextPane.selectionBackground",
                     "List.selectionBackground", "Button.select" }) {
                 UIManager.put(key, selected);
             }

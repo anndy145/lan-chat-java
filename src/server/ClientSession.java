@@ -14,6 +14,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 class ClientSession implements Runnable {
     private final Socket socket;
     private final Server server;
+    volatile boolean receivesImages;
+    long groupDepartureVersion;
+    boolean isClosing() { return closing.get(); }
     private static final int MAX_PENDING_MESSAGES = 128;
     private static final int MAX_PENDING_BYTES = 1024 * 1024;
     private static final byte[] STOP = new byte[0];
@@ -35,6 +38,7 @@ class ClientSession implements Runnable {
     public void run() {
         boolean requestedQuit = false;
         boolean rejected = false;
+        ImageUpload images = new ImageUpload(this, server);
         try {
             startWriter();
             BoundedLineReader input = new BoundedLineReader(socket);
@@ -67,12 +71,18 @@ class ClientSession implements Runnable {
             }
 
             String line;
-            while ((line = input.readLine(0)) != null) {
+            while (true) {
+                long imageDeadline = images.deadline();
+                if (imageDeadline == 0 && socket.getSoTimeout() != 0) socket.setSoTimeout(0);
+                line = input.readLine(imageDeadline);
+                if (line == null) break;
                 if ("/quit".equalsIgnoreCase(line.trim())) {
                     requestedQuit = true;
                     break;
                 }
+                if (images.handle(line)) continue;
                 if (ChatProtocol.LEAVE.equals(line)) {
+                    images.close();
                     server.setActive(this, false);
                 } else if ("@join".equals(line)) {
                     server.join(this, name);
@@ -146,6 +156,7 @@ class ClientSession implements Runnable {
         } catch (IOException exception) {
             // 關閉連線時由 Server 統一記錄狀態，避免重複訊息。
         } finally {
+            images.close();
             if (rejected) drainRejection();
             closeSocket();
             if (writerThread != null) writerThread.interrupt();
@@ -166,6 +177,18 @@ class ClientSession implements Runnable {
             }
         }
         if (overflow) requestClose();
+    }
+
+    // 圖片轉送使用有期限的重試，佇列滿時保留一般聊天的處理能力。
+    boolean offerImage(byte[] bytes) {
+        synchronized (outboundLock) {
+            if (closing.get() || bytes.length > MAX_PENDING_BYTES - 128 * 1024 - pendingBytes
+                    || outbound.remainingCapacity() <= 16 || !outbound.offer(bytes)) {
+                return false;
+            }
+            pendingBytes += bytes.length;
+            return true;
+        }
     }
 
     private void startWriter() throws IOException {

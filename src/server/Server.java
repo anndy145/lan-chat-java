@@ -292,6 +292,7 @@ public class Server implements AutoCloseable {
             member.send(ChatProtocol.GROUP_ERROR + encode("You are no longer a member of this group."));
             return;
         }
+        member.groupDepartureVersion++;
         member.send(ChatProtocol.GROUP_LEFT + id);
         notifyGroupDeparture(id, group, member.getName());
         if (group.members.isEmpty()) groups.remove(id);
@@ -301,6 +302,38 @@ public class Server implements AutoCloseable {
         String announcement = ChatProtocol.GROUP_MESSAGE + id + ":" + encode(group.name) + ":"
                 + encode(timestamped(name + " left the group."));
         group.members.forEach(member -> member.send(announcement));
+    }
+
+    synchronized ImageUpload.Route imageRoute(ClientSession sender, boolean groupChat, String target) {
+        if (!clients.contains(sender) || !sender.isActive() || sender.isClosing()) return null;
+        if (groupChat) {
+            ChatGroup group = groups.get(target);
+            if (group == null || !group.members.contains(sender)) return null;
+            return new ImageUpload.Route(group.name, group.members.stream()
+                    .filter(member -> member != sender && !member.isClosing())
+                    .map(member -> new ImageUpload.Recipient(member, member.getUserId(), target, group.name, member.groupDepartureVersion))
+                    .toList());
+        }
+        return clients.stream().filter(peer -> peer != sender && peer.isActive()
+                && !peer.isClosing() && target.equals(peer.getUserId()))
+                .findFirst().map(peer -> new ImageUpload.Route(peer.getName(), java.util.List.of(
+                        new ImageUpload.Recipient(peer, target, sender.getUserId(), sender.getName(), 0))))
+                .orElse(null);
+    }
+
+    synchronized int queueImage(ClientSession sender, String senderId, long senderVersion, boolean groupChat, String target,
+                                ImageUpload.Recipient recipient, byte[] frame) {
+        ClientSession peer = recipient.session();
+        if (!clients.contains(sender) || !sender.isActive() || sender.isClosing()
+                || !senderId.equals(sender.getUserId()) || !clients.contains(peer) || !peer.isActive()
+                || peer.isClosing() || !recipient.id().equals(peer.getUserId())) return -1;
+        if (groupChat) {
+            ChatGroup group = groups.get(target);
+            if (group == null || !group.members.contains(sender) || !group.members.contains(peer)
+                    || senderVersion != sender.groupDepartureVersion
+                    || recipient.groupVersion() != peer.groupDepartureVersion) return -1;
+        }
+        return peer.offerImage(frame) ? 1 : 0;
     }
 
     public synchronized void sendGroup(ClientSession sender, String id, String text) {
@@ -341,6 +374,7 @@ public class Server implements AutoCloseable {
             Map.Entry<String, ChatGroup> entry = iterator.next();
             ChatGroup group = entry.getValue();
             if (group.members.remove(session)) {
+                session.groupDepartureVersion++;
                 notifyGroupDeparture(entry.getKey(), group, session.getName());
                 if (group.members.isEmpty()) iterator.remove();
             }

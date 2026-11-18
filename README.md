@@ -38,6 +38,8 @@ java -cp "out;resources" client.ChatWindow
 
 按 `View online users` 可在不加入聊天的情況下查看名單。加入聊天後按 `Leave` 可離開聊天並繼續查看名單；按 `Dark mode` 或 `Light mode` 可切換主題。
 
+在私訊或群組分頁，按 `Send image` 選擇 PNG、JPG 或 JPEG。每張最多 5 MiB 和 2,000 萬像素。點擊對話中的縮圖可以預覽或另存原檔。命令列只顯示收圖提示。請更新 Server 和 GUI Client 以啟用圖片功能。
+
 ## 命令列介面
 
 連接現有 Server 並加入聊天：

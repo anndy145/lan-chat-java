@@ -23,6 +23,7 @@ final class ChatConnection {
         BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         PrintWriter output = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         output.println(ChatProtocol.OBSERVE);
+        output.println(common.ImageWire.ENABLE);
         if (!observeOnly) output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
         connected.accept(output);
         String line;

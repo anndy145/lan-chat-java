@@ -1,6 +1,7 @@
 package client;
 
 import common.ChatProtocol;
+import common.ImageWire;
 import client.ChatModel.OnlineUser;
 import java.io.IOException;
 import java.net.Socket;
@@ -14,6 +15,7 @@ import server.Server;
 
 /** 處理使用者操作與連線事件。所有狀態與介面更新都在 Swing 執行緒執行。 */
 final class ChatController {
+    private String imageUploadId;
     private final ChatWindow view;
     private final ChatModel model;
 
@@ -161,6 +163,7 @@ final class ChatController {
         // 網路連線可能需要等待，放在背景執行緒以免視窗卡住。
         Thread connectionThread = new Thread(() -> {
             Socket newSocket = new Socket();
+            ChatImages images = new ChatImages();
             try {
                 ChatConnection.receive(newSocket, host, port, observeOnly, name, writer -> {
                 // Swing 元件只能在介面執行緒更新。
@@ -178,9 +181,30 @@ final class ChatController {
                     appendMessage(observeOnly ? "Connected. You can view online users." : "Joining chat...");
                 });
                 }, received -> {
+                    if (ChatImages.isData(received)) {
+                        try {
+                            ChatImages.Picture picture = images.receive(received);
+                            if (picture != null) SwingUtilities.invokeLater(() -> {
+                                if (model.socket != newSocket || model.observing) return;
+                                if (model.addPicture(picture)) view.showPicture(picture);
+                                else appendMessage("Image history is full. Reconnect to clear it.");
+                            });
+                        } catch (IOException exception) {
+                            SwingUtilities.invokeLater(() -> {
+                                if (model.socket == newSocket) appendMessage(exception.getMessage());
+                            });
+                        }
+                        return;
+                    }
                     SwingUtilities.invokeLater(() -> {
                         if (model.socket == newSocket) {
-                            if (received.startsWith(ChatProtocol.JOINED)) {
+                            if (received.equals(ImageWire.READY)) {
+                                view.enableImages(true);
+                            } else if (received.startsWith(ImageWire.RESULT)) {
+                                showImageResult(received);
+                            } else if (received.startsWith(ImageWire.NOTICE)) {
+                                appendMessage(ChatProtocol.decode(received.substring(ImageWire.NOTICE.length())));
+                            } else if (received.startsWith(ChatProtocol.JOINED)) {
                                 model.activeId = received.substring(8);
                                 model.joining = false;
                                 model.observing = false;
@@ -257,6 +281,42 @@ final class ChatController {
         connectionThread.start();
     }
 
+    void sendPicture() {
+        String group = view.selectedGroupId();
+        String target = group == null ? view.selectedPrivateId() : group;
+        var writer = model.output;
+        String sender = model.activeId;
+        if (target == null || writer == null || sender == null || imageUploadId != null) return;
+        var file = view.choosePicture();
+        if (file == null || model.output != writer || !sender.equals(model.activeId)) return;
+        String id = java.util.UUID.randomUUID().toString();
+        imageUploadId = id;
+        view.setImageBusy(true);
+        var timeout = new javax.swing.Timer(125_000, event ->
+                finishImageUpload(id, "Image transfer timed out."));
+        timeout.setRepeats(false);
+        timeout.start();
+        Thread.ofVirtual().start(() -> {
+            try {
+                ChatImages.send(writer, file, id, sender, group != null, target);
+            } catch (IOException exception) {
+                SwingUtilities.invokeLater(() -> finishImageUpload(id, exception.getMessage()));
+            }
+        });
+    }
+
+    private void showImageResult(String line) {
+        String[] result = line.substring(ImageWire.RESULT.length()).split(":", 2);
+        if (result.length == 2) finishImageUpload(result[0], ChatProtocol.decode(result[1]));
+    }
+
+    private void finishImageUpload(String id, String message) {
+        if (!id.equals(imageUploadId)) return;
+        imageUploadId = null;
+        view.setImageBusy(false);
+        appendMessage(message);
+    }
+
     void sendMessage() {
         String message = view.message();
         if (model.output == null || message.isBlank()) {
@@ -294,7 +354,7 @@ final class ChatController {
             view.showMessage("Select another user.");
             return;
         }
-        model.privateHistory.computeIfAbsent(target.id, key -> new StringBuilder());
+        model.privateHistory.computeIfAbsent(target.id, key -> new ArrayList<>());
         view.selectPrivateChat(target);
     }
 
@@ -424,6 +484,9 @@ final class ChatController {
     void disconnected(Socket closedSocket, String message) {
         if (model.socket == closedSocket || (model.socket == null && model.connecting)) {
             model.socket = null;
+        imageUploadId = null;
+        view.enableImages(false);
+        view.setImageBusy(false);
             model.output = null;
             model.connecting = false;
             model.joining = false;
@@ -442,6 +505,9 @@ final class ChatController {
         model.connectionGeneration++;
         Socket oldSocket = model.socket;
         model.socket = null;
+        imageUploadId = null;
+        view.enableImages(false);
+        view.setImageBusy(false);
         model.output = null;
         model.connecting = false;
         model.joining = false;

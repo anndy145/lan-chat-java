@@ -54,7 +54,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out/test-classes | Out-Null
-          javac -encoding UTF-8 -cp out/classes -d out/test-classes tests/IdentityRegression.java tests/ClientCommandRegression.java tests/GroupMembershipRegression.java tests/ServerInputRegression.java tests/SlowClientRegression.java
+          javac -encoding UTF-8 -cp out/classes -d out/test-classes tests/IdentityRegression.java tests/ClientCommandRegression.java tests/GroupMembershipRegression.java tests/ServerInputRegression.java tests/SlowClientRegression.java tests/ImageFilesRegression.java tests/ImageChunksRegression.java tests/ImageTransferRegression.java
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           java -cp "out/classes;out/test-classes" IdentityRegression
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -65,6 +65,12 @@ jobs:
           java -cp "out/classes;out/test-classes" ServerInputRegression
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           java -cp "out/classes;out/test-classes" SlowClientRegression
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java -cp "out/classes;out/test-classes" ImageFilesRegression
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java -cp "out/classes;out/test-classes" ImageChunksRegression
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java -cp "out/classes;out/test-classes" ImageTransferRegression
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create portable application

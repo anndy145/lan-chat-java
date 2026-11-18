@@ -33,6 +33,13 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextPane;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.text.BadLocationException;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.io.IOException;
 import javax.swing.JTextField;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
@@ -51,6 +58,9 @@ public class ChatWindow extends JFrame {
     final JButton themeButton = new JButton("Dark mode");
     final JTextArea chatArea = new JTextArea();
     final JTextField inputField = new JTextField();
+    private final JButton imageButton = new JButton("Send image");
+    private boolean imagesEnabled;
+    private boolean imageBusy;
     final JButton sendButton = new JButton("Send");
     final JButton leaveButton = new JButton("Leave");
     final JButton privateButton = new JButton("Open private chat");
@@ -86,10 +96,10 @@ public class ChatWindow extends JFrame {
 
     static final class PrivateChat {
         final String name;
-        final JTextArea area;
+        final JTextPane area;
         final JScrollPane pane;
 
-        PrivateChat(String name, JTextArea area, JScrollPane pane) {
+        PrivateChat(String name, JTextPane area, JScrollPane pane) {
             this.name = name;
             this.area = area;
             this.pane = pane;
@@ -153,6 +163,7 @@ public class ChatWindow extends JFrame {
         inputPanel.add(inputField, BorderLayout.CENTER);
         JPanel buttonsPanel = new JPanel();
         buttonsPanel.add(sendButton);
+        buttonsPanel.add(imageButton);
         buttonsPanel.add(leaveButton);
         inputPanel.add(buttonsPanel, BorderLayout.EAST);
         int buttonWidth = Math.max(
@@ -221,6 +232,8 @@ public class ChatWindow extends JFrame {
         viewUsersButton.addActionListener(event -> controller.viewUsersAction());
         hostButton.addActionListener(event -> controller.hostAction());
         sendButton.addActionListener(event -> controller.sendMessage());
+        imageButton.addActionListener(event -> controller.sendPicture());
+        chats.addChangeListener(event -> refreshImageButton());
         themeButton.addActionListener(event -> toggleTheme());
         privateButton.addActionListener(event -> controller.openSelectedChat());
         createGroupButton.addActionListener(event -> controller.createGroup());
@@ -380,22 +393,23 @@ public class ChatWindow extends JFrame {
         inputField.requestFocusInWindow();
     }
 
-    void showGroupMessage(String id, String name, String text) {
+    private JScrollPane groupChat(String id, String name) {
         JScrollPane pane = groupChats.get(id);
         if (pane == null) {
-            JTextArea area = new JTextArea();
+            JTextPane area = new JTextPane();
             area.setEditable(false);
-            area.setLineWrap(true);
-            area.setWrapStyleWord(true);
             pane = new JScrollPane(area);
             groupChats.put(id, pane);
             addChatTab("Group: " + name, pane);
         } else if (chats.indexOfComponent(pane) < 0) {
             addChatTab(tabNames.get(pane), pane);
         }
-        JTextArea area = (JTextArea) pane.getViewport().getView();
-        area.setText(text);
-        area.setCaretPosition(area.getDocument().getLength());
+        return pane;
+    }
+
+    void showGroupMessage(String id, String name, String text) {
+        JScrollPane pane = groupChat(id, name);
+        appendText((JTextPane) pane.getViewport().getView(), text);
         markUnread(pane);
     }
 
@@ -407,9 +421,91 @@ public class ChatWindow extends JFrame {
             appendMessage(text);
             return;
         }
-        chat.area.setText(text);
-        chat.area.setCaretPosition(chat.area.getDocument().getLength());
+        appendText(chat.area, text);
         markUnread(chat.pane);
+    }
+
+    private static void appendText(JTextPane pane, String text) {
+        var document = pane.getStyledDocument();
+        try {
+            document.insertString(document.getLength(), text + "\n", null);
+            pane.setCaretPosition(document.getLength());
+        } catch (BadLocationException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    void enableImages(boolean enabled) {
+        imagesEnabled = enabled;
+        refreshImageButton();
+    }
+
+    void setImageBusy(boolean busy) {
+        imageBusy = busy;
+        refreshImageButton();
+    }
+
+    private void refreshImageButton() {
+        imageButton.setEnabled(imagesEnabled && !imageBusy && sendButton.isEnabled()
+                && (selectedPrivateId() != null || selectedGroupId() != null));
+    }
+
+    Path choosePicture() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileFilter(new FileNameExtensionFilter("PNG and JPEG images", "png", "jpg", "jpeg"));
+        return chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION
+                ? chooser.getSelectedFile().toPath() : null;
+    }
+
+    void showPicture(ChatImages.Picture picture) {
+        JScrollPane scroll = picture.group() ? groupChat(picture.conversation(), picture.title())
+                : privateChat(picture.conversation(), picture.title()).pane;
+        JTextPane pane = (JTextPane) scroll.getViewport().getView();
+        appendText(pane, picture.sender() + ": " + picture.filename());
+        JButton thumbnail = new JButton(new ImageIcon(picture.thumbnail()));
+        thumbnail.setToolTipText(picture.filename());
+        thumbnail.getAccessibleContext().setAccessibleName("Preview " + picture.filename());
+        thumbnail.addActionListener(event -> previewPicture(picture));
+        pane.setCaretPosition(pane.getDocument().getLength());
+        pane.insertComponent(thumbnail);
+        appendText(pane, "");
+        markUnread(scroll);
+    }
+
+    private void previewPicture(ChatImages.Picture picture) {
+        Thread.ofVirtual().start(() -> {
+            try {
+                var image = ChatImages.scaled(common.ImageFiles.decode(picture.bytes()), 960);
+                SwingUtilities.invokeLater(() -> {
+                    if (!isDisplayable()) return;
+                    Object[] choices = {"Save as…", "Close"};
+                    JLabel preview = new JLabel(new ImageIcon(image));
+                    JScrollPane scroll = new JScrollPane(preview);
+                    scroll.setPreferredSize(new java.awt.Dimension(Math.min(720, image.getWidth() + 20),
+                            Math.min(520, image.getHeight() + 20)));
+                    int choice = JOptionPane.showOptionDialog(this, scroll, picture.filename(),
+                            JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, choices, choices[1]);
+                    if (choice == 0) savePicture(picture);
+                });
+            } catch (IOException exception) {
+                SwingUtilities.invokeLater(() -> showMessage(exception.getMessage()));
+            }
+        });
+    }
+
+    private void savePicture(ChatImages.Picture picture) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File(picture.filename()));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        Path destination = chooser.getSelectedFile().toPath();
+        Thread.ofVirtual().start(() -> {
+            try {
+                Files.write(destination, picture.bytes(), java.nio.file.StandardOpenOption.CREATE_NEW,
+                        java.nio.file.StandardOpenOption.WRITE);
+            } catch (IOException exception) {
+                SwingUtilities.invokeLater(() -> showMessage("Could not save image: " + exception.getMessage()));
+            }
+        });
     }
 
     void showOnlineUsers(List<OnlineUser> users) {
@@ -428,10 +524,8 @@ public class ChatWindow extends JFrame {
 
     PrivateChat privateChat(String peerId, String peerName) {
         PrivateChat chat = privateChats.computeIfAbsent(peerId, id -> {
-            JTextArea area = new JTextArea();
+            JTextPane area = new JTextPane();
             area.setEditable(false);
-            area.setLineWrap(true);
-            area.setWrapStyleWord(true);
             JScrollPane pane = new JScrollPane(area);
             addChatTab(peerName, pane);
             return new PrivateChat(peerName, area, pane);
@@ -536,6 +630,7 @@ public class ChatWindow extends JFrame {
                 .setEnabled(!model.startingServer && (model.temporaryServer != null || (!connected && !model.observing && !model.connecting)));
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
+        refreshImageButton();
         privateButton.setEnabled(connected);
         createGroupButton.setEnabled(connected);
         addMembersButton.setEnabled(connected);

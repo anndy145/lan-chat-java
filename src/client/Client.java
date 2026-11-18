@@ -322,6 +322,12 @@ public class Client {
                     } catch (IllegalArgumentException exception) {
                         System.out.println("Invalid group error received.");
                     }
+                } else if (message.startsWith(common.ImageWire.NOTICE)) {
+                    try {
+                        System.out.println(ChatProtocol.decode(message.substring(common.ImageWire.NOTICE.length())));
+                    } catch (IllegalArgumentException exception) {
+                        System.out.println("Invalid image notification.");
+                    }
                 } else if (message.startsWith(ChatProtocol.GROUP_MESSAGE)) {
                     String[] parts = message.substring(7).split(":", 3);
                     if (parts.length == 3) {

@@ -12,21 +12,33 @@ import server.Server;
 final class ChatModel {
     final List<OnlineUser> onlineUsers = new ArrayList<>();
     final StringBuilder lobbyHistory = new StringBuilder();
-    final Map<String, StringBuilder> privateHistory = new LinkedHashMap<>();
-    final Map<String, StringBuilder> groupHistory = new LinkedHashMap<>();
+    interface Entry {}
+    record Text(String value) implements Entry {}
+    final Map<String, List<Entry>> privateHistory = new LinkedHashMap<>();
+    final Map<String, List<Entry>> groupHistory = new LinkedHashMap<>();
+
+    boolean addPicture(ChatImages.Picture picture) {
+        long retained = java.util.stream.Stream.concat(privateHistory.values().stream(), groupHistory.values().stream())
+                .flatMap(List::stream).filter(ChatImages.Picture.class::isInstance)
+                .map(ChatImages.Picture.class::cast).mapToLong(item -> item.bytes().length + 240L * 240 * 4).sum();
+        if (retained + picture.bytes().length + 240L * 240 * 4 > 32L * 1024 * 1024) return false;
+        var history = picture.group() ? groupHistory : privateHistory;
+        history.computeIfAbsent(picture.conversation(), key -> new ArrayList<>()).add(picture);
+        return true;
+    }
 
     String addLobbyMessage(String text) {
         return lobbyHistory.append(text).append('\n').toString();
     }
 
     String addPrivateMessage(String id, String text) {
-        return privateHistory.computeIfAbsent(id, key -> new StringBuilder())
-                .append(text).append('\n').toString();
+        privateHistory.computeIfAbsent(id, key -> new ArrayList<>()).add(new Text(text));
+        return text;
     }
 
     String addGroupMessage(String id, String text) {
-        return groupHistory.computeIfAbsent(id, key -> new StringBuilder())
-                .append(text).append('\n').toString();
+        groupHistory.computeIfAbsent(id, key -> new ArrayList<>()).add(new Text(text));
+        return text;
     }
 
     static final class OnlineUser {

@@ -2,9 +2,7 @@ package server;
 
 import common.ChatProtocol;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
@@ -29,10 +27,12 @@ class ClientSession implements Runnable {
     public void run() {
         boolean requestedQuit = false;
         try (Socket ignored = socket;
-             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
              PrintWriter writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
             output = writer;
-            String requestedName = input.readLine();
+            BoundedLineReader input = new BoundedLineReader(socket);
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+            String requestedName = input.readLine(deadline);
+            socket.setSoTimeout(0);
             if (requestedName == null) {
                 return;
             }
@@ -56,7 +56,7 @@ class ClientSession implements Runnable {
             }
 
             String line;
-            while ((line = input.readLine()) != null) {
+            while ((line = input.readLine(0)) != null) {
                 if ("/quit".equalsIgnoreCase(line.trim())) {
                     requestedQuit = true;
                     break;

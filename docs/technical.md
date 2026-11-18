@@ -94,7 +94,7 @@ Server 主控台顯示使用者加入、主動離開或連線中斷的時間與�
 ## 限制與測試狀態
 
 - 暱稱最多 32 個 Unicode 碼位，文字訊息最多 2,000 個 Unicode 碼位。由多個碼位組成的表情符號可能算作多個字元。
-- Server 尚未限制 Socket 單行接收資料的大小，也沒有設定首次連線握手的等待期限。文字長度檢查不等同於接收資料量限制。
+- Server 限制單行內容最多 16 KiB，並要求連線後 10 秒內完成第一行協定資料。完成第一行後不限制閒置等待時間。超過上限或逾時時會關閉該連線。
 - TCP 連線沒有加密，也沒有帳號驗證。Server 可以讀取轉送中的訊息。
 - 暱稱僅在使用者線上時保持唯一。臨時 ID 無法驗證重新上線的人是否為同一人。
 - v2 協定與舊版不相容，需要同時更新 Server、GUI Client 和命令列 Client。
@@ -106,8 +106,9 @@ Server 主控台顯示使用者加入、主動離開或連線中斷的時間與�
 `IdentityRegression` 驗證臨時 ID、私訊及群組流程。`ClientCommandRegression` 啟動命令列 Client，驗證指令、私訊與公開訊息隔離。在 Windows 專案根目錄執行：
 
 ```cmd
-javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java tests\IdentityRegression.java tests\ClientCommandRegression.java tests\GroupMembershipRegression.java
+javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java tests\IdentityRegression.java tests\ClientCommandRegression.java tests\GroupMembershipRegression.java tests\ServerInputRegression.java
 java -cp out IdentityRegression
 java -cp out ClientCommandRegression
 java -cp out GroupMembershipRegression
+java -cp out ServerInputRegression
 ```

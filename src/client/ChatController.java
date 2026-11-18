@@ -78,14 +78,14 @@ final class ChatController {
                     model.startingServer = false;
                     view.useLocalHost();
                     view.setConnected(false);
-                    appendMessage("Temporary server started on port " + port + ". LAN IP: " + addresses);
+                    appendMessage("Temp server started on port " + port + ". LAN IP: " + addresses);
                 });
                 server.serve();
                 SwingUtilities.invokeLater(() -> {
                     if (generation == model.serverGeneration && model.temporaryServer == server) {
                         model.temporaryServer = null;
                         view.setConnected(model.socket != null && !model.observing);
-                        appendMessage("Temporary server stopped.");
+                        appendMessage("Temp server stopped.");
                     }
                 });
             } catch (IOException exception) {
@@ -95,7 +95,7 @@ final class ChatController {
                     model.temporaryServer = null;
                     model.startingServer = false;
                     view.setConnected(model.socket != null && !model.observing);
-                    appendMessage("Temporary server failed: " + exception.getMessage());
+                    appendMessage("Temp server failed: " + exception.getMessage());
                 });
             } finally {
                 server.close();
@@ -112,7 +112,7 @@ final class ChatController {
         model.temporaryServer = null;
         if (server != null) {
             server.close();
-            appendMessage("Temporary server stopped.");
+            appendMessage("Temp server stopped.");
         }
         view.setConnected(model.socket != null && !model.observing);
     }

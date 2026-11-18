@@ -59,7 +59,7 @@ public class ChatWindow extends JFrame {
     final JTextField nameField = new JTextField();
     final JButton connectButton = new JButton("Connect");
     final JButton viewUsersButton = new JButton("View online users");
-    final JButton hostButton = new JButton("Start temporary server");
+    final JButton hostButton = new JButton("Start temp server");
     final JButton themeButton = new JButton("Dark mode");
     final JTextArea chatArea = new JTextArea();
     final JTextField inputField = new JTextField();
@@ -90,8 +90,10 @@ public class ChatWindow extends JFrame {
             "Button.select", "Button.disabledText", "Button.focus", "Button.gradient", "TextField.background",
             "TextField.foreground", "TextField.inactiveBackground", "TextField.inactiveForeground",
             "TextField.caretForeground", "TextField.selectionBackground", "TextField.selectionForeground",
-            "TextArea.background", "TextPane.background", "TextArea.foreground", "TextPane.foreground", "TextArea.caretForeground", "TextPane.caretForeground",
-            "TextArea.selectionBackground", "TextPane.selectionBackground", "TextArea.selectionForeground", "TextPane.selectionForeground", "List.background", "List.foreground",
+            "TextArea.background", "TextPane.background", "TextArea.foreground", "TextPane.foreground",
+            "TextArea.caretForeground", "TextPane.caretForeground",
+            "TextArea.selectionBackground", "TextPane.selectionBackground", "TextArea.selectionForeground",
+            "TextPane.selectionForeground", "List.background", "List.foreground",
             "List.selectionBackground", "List.selectionForeground", "TabbedPane.background", "TabbedPane.foreground",
             "TabbedPane.selected", "TabbedPane.contentAreaColor", "TabbedPane.unselectedBackground",
             "TabbedPane.focus", "TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow",
@@ -338,14 +340,17 @@ public class ChatWindow extends JFrame {
                     "TextArea.background", "TextPane.background", "List.background", "nimbusLightBackground" })
                 UIManager.put(key, input);
             for (String key : new String[] { "Label.foreground", "Button.foreground", "TextField.foreground",
-                    "TextField.caretForeground", "TextArea.foreground", "TextPane.foreground", "TextArea.caretForeground", "TextPane.caretForeground", "List.foreground",
+                    "TextField.caretForeground", "TextArea.foreground", "TextPane.foreground",
+                    "TextArea.caretForeground", "TextPane.caretForeground", "List.foreground",
                     "TabbedPane.foreground", "OptionPane.messageForeground", "ToolTip.foreground",
-                    "TextField.selectionForeground", "TextArea.selectionForeground", "TextPane.selectionForeground", "List.selectionForeground" }) {
+                    "TextField.selectionForeground", "TextArea.selectionForeground", "TextPane.selectionForeground",
+                    "List.selectionForeground" }) {
                 UIManager.put(key, text);
             }
             for (String key : new String[] { "Button.disabledText", "TextField.inactiveForeground" })
                 UIManager.put(key, disabled);
-            for (String key : new String[] { "TextField.selectionBackground", "TextArea.selectionBackground", "TextPane.selectionBackground",
+            for (String key : new String[] { "TextField.selectionBackground", "TextArea.selectionBackground",
+                    "TextPane.selectionBackground",
                     "List.selectionBackground", "Button.select" }) {
                 UIManager.put(key, selected);
             }
@@ -366,6 +371,7 @@ public class ChatWindow extends JFrame {
                 UIManager.put(key, white);
             }
         }
+        UIManager.put("TabbedPane.tabInsets", new javax.swing.plaf.InsetsUIResource(10, 12, 10, 12));
         SwingUtilities.updateComponentTreeUI(this);
         // 已隱藏的分頁不在視窗元件樹內，也必須一起更新。
         for (PrivateChat chat : privateChats.values())
@@ -495,23 +501,61 @@ public class ChatWindow extends JFrame {
         button.setRolloverEnabled(true);
     }
 
-    void showMessage(String message) { JOptionPane.showMessageDialog(this, message); }
+    void showMessage(String message) {
+        JOptionPane.showMessageDialog(this, message);
+    }
+
     void showMessage(String message, String title) {
         JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE);
     }
-    String askGroupName() { return JOptionPane.showInputDialog(this, "Group name:"); }
 
-    String host() { return hostField.getText().strip(); }
-    String port() { return portField.getText().strip(); }
-    String name() { return nameField.getText().strip(); }
-    String message() { return inputField.getText(); }
-    void clearInput() { inputField.setText(""); }
-    void useLocalHost() { hostField.setText("127.0.0.1"); }
-    void focusHost() { hostField.requestFocusInWindow(); }
-    void focusPort() { portField.requestFocusInWindow(); }
-    void focusName() { nameField.requestFocusInWindow(); }
-    List<OnlineUser> selectedUsers() { return usersList.getSelectedValuesList(); }
-    boolean hasPrivateChat(String id) { return privateChats.containsKey(id); }
+    String askGroupName() {
+        return JOptionPane.showInputDialog(this, "Group name:");
+    }
+
+    String host() {
+        return hostField.getText().strip();
+    }
+
+    String port() {
+        return portField.getText().strip();
+    }
+
+    String name() {
+        return nameField.getText().strip();
+    }
+
+    String message() {
+        return inputField.getText();
+    }
+
+    void clearInput() {
+        inputField.setText("");
+    }
+
+    void useLocalHost() {
+        hostField.setText("127.0.0.1");
+    }
+
+    void focusHost() {
+        hostField.requestFocusInWindow();
+    }
+
+    void focusPort() {
+        portField.requestFocusInWindow();
+    }
+
+    void focusName() {
+        nameField.requestFocusInWindow();
+    }
+
+    List<OnlineUser> selectedUsers() {
+        return usersList.getSelectedValuesList();
+    }
+
+    boolean hasPrivateChat(String id) {
+        return privateChats.containsKey(id);
+    }
 
     String selectedGroupId() {
         return groupChats.entrySet().stream()
@@ -561,8 +605,10 @@ public class ChatWindow extends JFrame {
 
     void showPrivateMessage(String id, String peer, String text) {
         PrivateChat chat = privateChats.get(id);
-        if (chat != null) chat = privateChat(id, chat.name);
-        else if (!peer.isEmpty()) chat = privateChat(id, peer);
+        if (chat != null)
+            chat = privateChat(id, chat.name);
+        else if (!peer.isEmpty())
+            chat = privateChat(id, peer);
         if (chat == null) {
             appendMessage(text);
             return;
@@ -600,7 +646,8 @@ public class ChatWindow extends JFrame {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileFilter(new FileNameExtensionFilter("PNG and JPEG images", "png", "jpg", "jpeg"));
         return chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION
-                ? chooser.getSelectedFile().toPath() : null;
+                ? chooser.getSelectedFile().toPath()
+                : null;
     }
 
     void showPicture(ChatImages.Picture picture) {
@@ -623,15 +670,17 @@ public class ChatWindow extends JFrame {
             try {
                 var image = ChatImages.scaled(common.ImageFiles.decode(picture.bytes()), 960);
                 SwingUtilities.invokeLater(() -> {
-                    if (!isDisplayable()) return;
-                    Object[] choices = {"Save as…", "Close"};
+                    if (!isDisplayable())
+                        return;
+                    Object[] choices = { "Save as…", "Close" };
                     JLabel preview = new JLabel(new ImageIcon(image));
                     JScrollPane scroll = new JScrollPane(preview);
                     scroll.setPreferredSize(new java.awt.Dimension(Math.min(720, image.getWidth() + 20),
                             Math.min(520, image.getHeight() + 20)));
                     int choice = JOptionPane.showOptionDialog(this, scroll, picture.filename(),
                             JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, choices, choices[1]);
-                    if (choice == 0) savePicture(picture);
+                    if (choice == 0)
+                        savePicture(picture);
                 });
             } catch (IOException exception) {
                 SwingUtilities.invokeLater(() -> showMessage(exception.getMessage()));
@@ -642,7 +691,8 @@ public class ChatWindow extends JFrame {
     private void savePicture(ChatImages.Picture picture) {
         JFileChooser chooser = new JFileChooser();
         chooser.setSelectedFile(new java.io.File(picture.filename()));
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
         Path destination = chooser.getSelectedFile().toPath();
         Thread.ofVirtual().start(() -> {
             try {
@@ -657,7 +707,8 @@ public class ChatWindow extends JFrame {
     void showOnlineUsers(List<OnlineUser> users) {
         List<OnlineUser> selected = usersList.getSelectedValuesList();
         onlineUsers.clear();
-        for (OnlineUser user : users) onlineUsers.addElement(user);
+        for (OnlineUser user : users)
+            onlineUsers.addElement(user);
         int[] indexes = selected.stream().mapToInt(onlineUsers::indexOf).filter(index -> index >= 0).toArray();
         usersList.setSelectedIndices(indexes);
         for (Map.Entry<String, PrivateChat> entry : privateChats.entrySet()) {
@@ -765,16 +816,19 @@ public class ChatWindow extends JFrame {
 
     void setConnected(boolean connected) {
         usersList.repaint();
-        hostField.setEnabled(!connected && !model.observing && !model.connecting && !model.startingServer && model.temporaryServer == null);
-        portField.setEnabled(!connected && !model.observing && !model.connecting && !model.startingServer && model.temporaryServer == null);
+        hostField.setEnabled(!connected && !model.observing && !model.connecting && !model.startingServer
+                && model.temporaryServer == null);
+        portField.setEnabled(!connected && !model.observing && !model.connecting && !model.startingServer
+                && model.temporaryServer == null);
         nameField.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
         connectButton.setText(model.observing ? "Join chat" : "Connect");
         connectButton.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
         viewUsersButton.setText(model.observing ? "Disconnect" : "View online users");
         viewUsersButton.setEnabled(!connected && !model.connecting && !model.joining && !model.startingServer);
-        hostButton.setText(model.temporaryServer == null ? "Start temporary server" : "Stop temporary server");
+        hostButton.setText(model.temporaryServer == null ? "Start temp server" : "Stop temp server");
         hostButton
-                .setEnabled(!model.startingServer && (model.temporaryServer != null || (!connected && !model.observing && !model.connecting)));
+                .setEnabled(!model.startingServer
+                        && (model.temporaryServer != null || (!connected && !model.observing && !model.connecting)));
         inputField.setEnabled(connected);
         sendButton.setEnabled(connected);
         refreshImageButton();

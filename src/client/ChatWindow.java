@@ -29,6 +29,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -335,6 +336,50 @@ public class ChatWindow extends JFrame {
         repaint();
     }
 
+    void showMessage(String message) { JOptionPane.showMessageDialog(this, message); }
+    void showMessage(String message, String title) {
+        JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE);
+    }
+    String askGroupName() { return JOptionPane.showInputDialog(this, "Group name:"); }
+
+    String host() { return hostField.getText().strip(); }
+    String port() { return portField.getText().strip(); }
+    String name() { return nameField.getText().strip(); }
+    String message() { return inputField.getText(); }
+    void clearInput() { inputField.setText(""); }
+    void useLocalHost() { hostField.setText("127.0.0.1"); }
+    void focusHost() { hostField.requestFocusInWindow(); }
+    void focusPort() { portField.requestFocusInWindow(); }
+    void focusName() { nameField.requestFocusInWindow(); }
+    List<OnlineUser> selectedUsers() { return usersList.getSelectedValuesList(); }
+    boolean hasPrivateChat(String id) { return privateChats.containsKey(id); }
+
+    String selectedGroupId() {
+        return groupChats.entrySet().stream()
+                .filter(entry -> entry.getValue() == chats.getSelectedComponent())
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+    }
+
+    String selectedPrivateId() {
+        return privateChats.entrySet().stream()
+                .filter(entry -> entry.getValue().pane == chats.getSelectedComponent())
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+    }
+
+    boolean isLobbySelected() {
+        return chats.getSelectedIndex() == 0;
+    }
+
+    boolean hasGroup(String id) {
+        return groupChats.containsKey(id);
+    }
+
+    void selectPrivateChat(OnlineUser user) {
+        PrivateChat chat = privateChat(user.id, user.name);
+        chats.setSelectedComponent(chat.pane);
+        inputField.requestFocusInWindow();
+    }
+
     void showGroupMessage(String id, String name, String text) {
         JScrollPane pane = groupChats.get(id);
         if (pane == null) {
@@ -349,7 +394,7 @@ public class ChatWindow extends JFrame {
             addChatTab(tabNames.get(pane), pane);
         }
         JTextArea area = (JTextArea) pane.getViewport().getView();
-        area.append(text + "\n");
+        area.setText(text);
         area.setCaretPosition(area.getDocument().getLength());
         markUnread(pane);
     }
@@ -362,7 +407,7 @@ public class ChatWindow extends JFrame {
             appendMessage(text);
             return;
         }
-        chat.area.append(text + "\n");
+        chat.area.setText(text);
         chat.area.setCaretPosition(chat.area.getDocument().getLength());
         markUnread(chat.pane);
     }
@@ -500,7 +545,7 @@ public class ChatWindow extends JFrame {
     }
 
     void appendMessage(String message) {
-        chatArea.append(message + "\n");
+        chatArea.setText(message);
         chatArea.setCaretPosition(chatArea.getDocument().getLength());
     }
 

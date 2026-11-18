@@ -2,16 +2,13 @@ package client;
 
 import common.ChatProtocol;
 import client.ChatModel.OnlineUser;
-import client.ChatWindow.PrivateChat;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import server.Server;
 
@@ -27,11 +24,11 @@ final class ChatController {
 
     void connectAction() {
         if (model.observing && model.output != null) {
-            String name = view.nameField.getText().strip();
+            String name = view.name();
             if (name.isEmpty()) {
-                JOptionPane.showMessageDialog(view, "Please enter a name.");
+                view.showMessage("Please enter a name.");
             } else if (name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
-                JOptionPane.showMessageDialog(view, "Name must be at most 32 characters.");
+                view.showMessage("Name must be at most 32 characters.");
             } else {
                 model.output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
                 model.joining = true;
@@ -43,7 +40,7 @@ final class ChatController {
     void viewUsersAction() {
         if (model.observing) {
             closeConnection();
-            view.appendMessage("Disconnected.");
+            appendMessage("Disconnected.");
         } else connect(true);
     }
 
@@ -55,11 +52,11 @@ final class ChatController {
     void startTemporaryServer() {
         int port;
         try {
-            port = Integer.parseInt(view.portField.getText().strip());
+            port = Integer.parseInt(view.port());
             if (port < 1 || port > 65535)
                 throw new NumberFormatException();
         } catch (NumberFormatException exception) {
-            JOptionPane.showMessageDialog(view, "Port must be a number from 1 to 65535.");
+            view.showMessage("Port must be a number from 1 to 65535.");
             return;
         }
         model.startingServer = true;
@@ -77,16 +74,16 @@ final class ChatController {
                     }
                     model.temporaryServer = server;
                     model.startingServer = false;
-                    view.hostField.setText("127.0.0.1");
+                    view.useLocalHost();
                     view.setConnected(false);
-                    view.appendMessage("Temporary server started on port " + port + ". LAN IP: " + addresses);
+                    appendMessage("Temporary server started on port " + port + ". LAN IP: " + addresses);
                 });
                 server.serve();
                 SwingUtilities.invokeLater(() -> {
                     if (generation == model.serverGeneration && model.temporaryServer == server) {
                         model.temporaryServer = null;
                         view.setConnected(model.socket != null && !model.observing);
-                        view.appendMessage("Temporary server stopped.");
+                        appendMessage("Temporary server stopped.");
                     }
                 });
             } catch (IOException exception) {
@@ -96,7 +93,7 @@ final class ChatController {
                     model.temporaryServer = null;
                     model.startingServer = false;
                     view.setConnected(model.socket != null && !model.observing);
-                    view.appendMessage("Temporary server failed: " + exception.getMessage());
+                    appendMessage("Temporary server failed: " + exception.getMessage());
                 });
             } finally {
                 server.close();
@@ -113,51 +110,53 @@ final class ChatController {
         model.temporaryServer = null;
         if (server != null) {
             server.close();
-            view.appendMessage("Temporary server stopped.");
+            appendMessage("Temporary server stopped.");
         }
         view.setConnected(model.socket != null && !model.observing);
     }
 
     void connect(boolean observeOnly) {
-        String host = view.hostField.getText().strip();
-        String name = view.nameField.getText().strip();
+        String host = view.host();
+        String name = view.name();
         if (host.isEmpty()) {
-            JOptionPane.showMessageDialog(view, "Please enter a server IP or hostname.");
-            view.hostField.requestFocusInWindow();
+            view.showMessage("Please enter a server IP or hostname.");
+            view.focusHost();
             return;
         }
         int port;
         try {
-            port = Integer.parseInt(view.portField.getText().strip());
+            port = Integer.parseInt(view.port());
         } catch (NumberFormatException exception) {
-            JOptionPane.showMessageDialog(view, "Port must be a number from 1 to 65535.");
-            view.portField.requestFocusInWindow();
+            view.showMessage("Port must be a number from 1 to 65535.");
+            view.focusPort();
             return;
         }
         if (port < 1 || port > 65535) {
-            JOptionPane.showMessageDialog(view, "Port must be between 1 and 65535.");
-            view.portField.requestFocusInWindow();
+            view.showMessage("Port must be between 1 and 65535.");
+            view.focusPort();
             return;
         }
         if (!observeOnly && name.isEmpty()) {
-            JOptionPane.showMessageDialog(view, "Please enter a name.");
-            view.nameField.requestFocusInWindow();
+            view.showMessage("Please enter a name.");
+            view.focusName();
             return;
         }
 
         if (!observeOnly && name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
-            JOptionPane.showMessageDialog(view, "Name must be at most 32 characters.");
-            view.nameField.requestFocusInWindow();
+            view.showMessage("Name must be at most 32 characters.");
+            view.focusName();
             return;
         }
 
         model.connecting = true;
+        model.privateHistory.clear();
+        model.groupHistory.clear();
         view.clearPrivateChats();
         model.activeName = null;
         model.activeId = null;
         long generation = ++model.connectionGeneration;
         view.setConnected(false);
-        view.appendMessage("Connecting...");
+        appendMessage("Connecting...");
 
         // 網路連線可能需要等待，放在背景執行緒以免視窗卡住。
         Thread connectionThread = new Thread(() -> {
@@ -176,7 +175,7 @@ final class ChatController {
                     model.observing = true;
                     model.joining = !observeOnly;
                     view.setConnected(false);
-                    view.appendMessage(observeOnly ? "Connected. You can view online users." : "Joining chat...");
+                    appendMessage(observeOnly ? "Connected. You can view online users." : "Joining chat...");
                 });
                 }, received -> {
                     SwingUtilities.invokeLater(() -> {
@@ -185,26 +184,28 @@ final class ChatController {
                                 model.activeId = received.substring(8);
                                 model.joining = false;
                                 model.observing = false;
-                                if (model.activeName != null && !model.activeName.equals(view.nameField.getText().strip())) {
-                                    view.clearPrivateChats();
+                                if (model.activeName != null && !model.activeName.equals(view.name())) {
+                                    model.privateHistory.clear();
+        model.groupHistory.clear();
+        view.clearPrivateChats();
                                 }
-                                model.activeName = view.nameField.getText().strip();
+                                model.activeName = view.name();
                                 view.setConnected(true);
-                                view.appendMessage("You joined the chat.");
+                                appendMessage("You joined the chat.");
                             } else if (received.equals(ChatProtocol.ERROR_NAME_LENGTH)) {
                                 model.joining = false;
                                 model.observing = true;
                                 view.setConnected(false);
-                                JOptionPane.showMessageDialog(view, "Name must be at most 32 characters.");
+                                view.showMessage("Name must be at most 32 characters.");
                             } else if (received.equals(ChatProtocol.ERROR_MESSAGE_LENGTH)) {
-                                JOptionPane.showMessageDialog(view, "Message must be at most 2000 characters.");
+                                view.showMessage("Message must be at most 2000 characters.");
                             } else if (received.equals(ChatProtocol.ERROR_NAME)) {
                                 model.joining = false;
                                 model.observing = true;
                                 view.setConnected(false);
-                                view.appendMessage("That name is already in use. Choose another name.");
+                                appendMessage("That name is already in use. Choose another name.");
                             } else if (received.equals(ChatProtocol.ERROR_VERSION) || received.equals("@joined")) {
-                                view.appendMessage("Incompatible server version. Update both server and client.");
+                                appendMessage("Incompatible server version. Update both server and client.");
                                 closeConnection();
                             } else if (received.startsWith(ChatProtocol.USERS)) {
                                 updateOnlineUsers(received.substring(7));
@@ -216,24 +217,25 @@ final class ChatController {
                                 receiveGroupMembers(received);
                             } else if (received.startsWith(ChatProtocol.GROUP_LEFT)) {
                                 String id = received.substring(ChatProtocol.GROUP_LEFT.length());
+                                model.groupHistory.remove(id);
                                 view.removeGroupChat(id);
-                                view.appendMessage("You left the group.");
+                                appendMessage("You left the group.");
                             } else if (received.startsWith(ChatProtocol.GROUP_ERROR)) {
                                 try {
-                                    JOptionPane.showMessageDialog(view, new String(Base64.getDecoder().decode(
+                                    view.showMessage(new String(Base64.getDecoder().decode(
                                             received.substring(13)), StandardCharsets.UTF_8));
                                 } catch (IllegalArgumentException exception) {
-                                    view.appendMessage("Received an invalid notification.");
+                                    appendMessage("Received an invalid notification.");
                                 }
                             } else if (received.startsWith(ChatProtocol.NOTICE)) {
                                 try {
-                                    view.appendMessage(new String(Base64.getDecoder().decode(received.substring(8)),
+                                    appendMessage(new String(Base64.getDecoder().decode(received.substring(8)),
                                             StandardCharsets.UTF_8));
                                 } catch (IllegalArgumentException exception) {
-                                    view.appendMessage("Received an invalid notification.");
+                                    appendMessage("Received an invalid notification.");
                                 }
                             } else if (!model.observing) {
-                                view.appendMessage(received);
+                                appendMessage(received);
                             }
                         }
                     });
@@ -256,37 +258,32 @@ final class ChatController {
     }
 
     void sendMessage() {
-        String message = view.inputField.getText();
+        String message = view.message();
         if (model.output == null || message.isBlank()) {
             return;
         }
         if (message.codePointCount(0, message.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
-            JOptionPane.showMessageDialog(view, "Message must be at most 2000 characters.");
+            view.showMessage("Message must be at most 2000 characters.");
             return;
         }
         // 伺服器會把訊息廣播回來，因此此處不重複加到聊天區。
-        view.inputField.setText("");
+        view.clearInput();
         if ("/quit".equalsIgnoreCase(message.strip())) {
             leaveChat();
-        } else if (view.chats.getSelectedIndex() == 0) {
+        } else if (view.isLobbySelected()) {
             model.output.println(ChatProtocol.SAY + encode(message));
-        } else if (view.groupChats.containsValue(view.chats.getSelectedComponent())) {
-            String groupId = view.groupChats.entrySet().stream()
-                    .filter(entry -> entry.getValue() == view.chats.getSelectedComponent())
-                    .map(Map.Entry::getKey).findFirst().orElseThrow();
-            model.output.println(ChatProtocol.GROUP_SEND + groupId + ":" + encode(message));
+        } else if (view.selectedGroupId() != null) {
+            model.output.println(ChatProtocol.GROUP_SEND + view.selectedGroupId() + ":" + encode(message));
         } else {
-            String targetId = view.privateChats.entrySet().stream()
-                    .filter(entry -> entry.getValue().pane == view.chats.getSelectedComponent())
-                    .map(Map.Entry::getKey).findFirst().orElseThrow();
-            model.output.println(ChatProtocol.PRIVATE + targetId + ":" + encode(message));
+            String targetId = view.selectedPrivateId();
+            if (targetId != null) model.output.println(ChatProtocol.PRIVATE + targetId + ":" + encode(message));
         }
     }
 
     void openSelectedChat() {
-        List<OnlineUser> selected = view.usersList.getSelectedValuesList();
+        List<OnlineUser> selected = view.selectedUsers();
         if (selected.size() != 1) {
-            JOptionPane.showMessageDialog(view, "Select exactly one online user.");
+            view.showMessage("Select exactly one online user.");
             return;
         }
         openPrivateChat(selected.get(0));
@@ -294,27 +291,26 @@ final class ChatController {
 
     void openPrivateChat(OnlineUser target) {
         if (target.id.equals(model.activeId)) {
-            JOptionPane.showMessageDialog(view, "Select another user.");
+            view.showMessage("Select another user.");
             return;
         }
-        PrivateChat chat = view.privateChat(target.id, target.name);
-        view.chats.setSelectedComponent(chat.pane);
-        view.inputField.requestFocusInWindow();
+        model.privateHistory.computeIfAbsent(target.id, key -> new StringBuilder());
+        view.selectPrivateChat(target);
     }
 
     void createGroup() {
-        List<String> members = view.usersList.getSelectedValuesList().stream()
+        List<String> members = view.selectedUsers().stream()
                 .filter(user -> !user.id.equals(model.activeId)).map(user -> user.id).collect(Collectors.toList());
         if (members.isEmpty()) {
-            JOptionPane.showMessageDialog(view, "Select at least one other online user. Hold Ctrl to select more.");
+            view.showMessage("Select at least one other online user. Hold Ctrl to select more.");
             return;
         }
-        String name = JOptionPane.showInputDialog(view, "Group name:");
+        String name = view.askGroupName();
         if (name == null)
             return;
         name = name.strip();
         if (name.isEmpty() || name.length() > 80 || name.contains("\n") || name.contains("\r")) {
-            JOptionPane.showMessageDialog(view, "Enter a group name of up to 80 characters.");
+            view.showMessage("Enter a group name of up to 80 characters.");
             return;
         }
         model.output.println(ChatProtocol.GROUP_CREATE + encode(name) + ":"
@@ -322,32 +318,28 @@ final class ChatController {
     }
 
     void addGroupMembers() {
-        String groupId = view.groupChats.entrySet().stream()
-                .filter(entry -> entry.getValue() == view.chats.getSelectedComponent())
-                .map(Map.Entry::getKey).findFirst().orElse(null);
+        String groupId = view.selectedGroupId();
         if (groupId == null) {
-            JOptionPane.showMessageDialog(view, "Select a group tab first.");
+            view.showMessage("Select a group tab first.");
             return;
         }
-        List<String> members = view.usersList.getSelectedValuesList().stream()
+        List<String> members = view.selectedUsers().stream()
                 .filter(user -> !user.id.equals(model.activeId)).map(user -> user.id).collect(Collectors.toList());
         if (members.isEmpty()) {
-            JOptionPane.showMessageDialog(view, "Select at least one other online user. Hold Ctrl to select more.");
+            view.showMessage("Select at least one other online user. Hold Ctrl to select more.");
             return;
         }
         model.output.println(ChatProtocol.GROUP_ADD + groupId + ":" + String.join(",", members));
     }
 
     private String selectedGroupId() {
-        return view.groupChats.entrySet().stream()
-                .filter(entry -> entry.getValue() == view.chats.getSelectedComponent())
-                .map(Map.Entry::getKey).findFirst().orElse(null);
+        return view.selectedGroupId();
     }
 
     void showGroupMembers() {
         String id = selectedGroupId();
         if (id == null) {
-            JOptionPane.showMessageDialog(view, "Select a group tab first.");
+            view.showMessage("Select a group tab first.");
         } else if (model.output != null) {
             model.output.println(ChatProtocol.GROUP_MEMBERS_REQUEST + id);
         }
@@ -356,7 +348,7 @@ final class ChatController {
     void leaveSelectedGroup() {
         String id = selectedGroupId();
         if (id == null) {
-            JOptionPane.showMessageDialog(view, "Select a group tab first.");
+            view.showMessage("Select a group tab first.");
         } else if (model.output != null) {
             model.output.println(ChatProtocol.GROUP_LEAVE + id);
         }
@@ -364,18 +356,22 @@ final class ChatController {
 
     private void receiveGroupMembers(String message) {
         String[] parts = message.substring(ChatProtocol.GROUP_MEMBERS.length()).split(":", 3);
-        if (parts.length != 3 || !view.groupChats.containsKey(parts[0])) return;
+        if (parts.length != 3 || !view.hasGroup(parts[0])) return;
         try {
             String title = ChatProtocol.decode(parts[1]);
             List<String> names = new java.util.ArrayList<>();
             if (!parts[2].isEmpty()) {
                 for (String encoded : parts[2].split(",")) names.add(ChatProtocol.decode(encoded));
             }
-            JOptionPane.showMessageDialog(view, String.join("\n", names),
-                    "Group members: " + title, JOptionPane.INFORMATION_MESSAGE);
+            view.showMessage(String.join("\n", names),
+                    "Group members: " + title);
         } catch (IllegalArgumentException exception) {
-            view.appendMessage("Received an invalid group member list.");
+            appendMessage("Received an invalid group member list.");
         }
+    }
+
+    private void appendMessage(String message) {
+        view.appendMessage(model.addLobbyMessage(message));
     }
 
     private static String encode(String text) {
@@ -386,9 +382,11 @@ final class ChatController {
         String[] parts = message.substring(ChatProtocol.GROUP_MESSAGE.length()).split(":", 3);
         if (parts.length != 3) return;
         try {
-            view.showGroupMessage(parts[0], ChatProtocol.decode(parts[1]), ChatProtocol.decode(parts[2]));
+            String name = ChatProtocol.decode(parts[1]);
+            String text = ChatProtocol.decode(parts[2]);
+            view.showGroupMessage(parts[0], name, model.addGroupMessage(parts[0], text));
         } catch (IllegalArgumentException exception) {
-            view.appendMessage("Received an invalid group message.");
+            appendMessage("Received an invalid group message.");
         }
     }
 
@@ -396,9 +394,15 @@ final class ChatController {
         String[] parts = message.substring(ChatProtocol.PRIVATE_MESSAGE.length()).split(":", 3);
         if (parts.length != 3) return;
         try {
-            view.showPrivateMessage(parts[0], ChatProtocol.decode(parts[1]), ChatProtocol.decode(parts[2]));
+            String peer = ChatProtocol.decode(parts[1]);
+            String text = ChatProtocol.decode(parts[2]);
+            if (peer.isEmpty() && !view.hasPrivateChat(parts[0])) {
+                appendMessage(text);
+            } else {
+                view.showPrivateMessage(parts[0], peer, model.addPrivateMessage(parts[0], text));
+            }
         } catch (IllegalArgumentException exception) {
-            view.appendMessage("Received an invalid private message.");
+            appendMessage("Received an invalid private message.");
         }
     }
 
@@ -410,10 +414,11 @@ final class ChatController {
         model.observing = true;
         model.activeId = null;
         model.output.println(ChatProtocol.LEAVE);
+        model.groupHistory.clear();
         view.clearGroupChats();
         view.setConnected(false);
-        view.inputField.setText("");
-        view.appendMessage("You left the chat.");
+        view.clearInput();
+        appendMessage("You left the chat.");
     }
 
     void disconnected(Socket closedSocket, String message) {
@@ -428,7 +433,7 @@ final class ChatController {
             view.showOnlineUsers(model.onlineUsers);
             view.setConnected(false);
             if (view.isDisplayable()) {
-                view.appendMessage(message);
+                appendMessage(message);
             }
         }
     }
@@ -461,7 +466,7 @@ final class ChatController {
             }
         } catch (IllegalArgumentException exception) {
             users.clear();
-            view.appendMessage("Received an invalid online user list.");
+            appendMessage("Received an invalid online user list.");
         }
         model.onlineUsers.clear();
         model.onlineUsers.addAll(users);

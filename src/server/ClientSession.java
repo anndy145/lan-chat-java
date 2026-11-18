@@ -3,17 +3,25 @@ package server;
 import common.ChatProtocol;
 
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** 處理單一 Client 的連線。 */
 class ClientSession implements Runnable {
     private final Socket socket;
     private final Server server;
-    private PrintWriter output;
+    private static final int MAX_PENDING_MESSAGES = 128;
+    private static final int MAX_PENDING_BYTES = 1024 * 1024;
+    private static final byte[] STOP = new byte[0];
+    private final ArrayBlockingQueue<byte[]> outbound = new ArrayBlockingQueue<>(MAX_PENDING_MESSAGES);
+    private final Object outboundLock = new Object();
+    private final AtomicBoolean closing = new AtomicBoolean();
+    private int pendingBytes;
+    private Thread writerThread;
     private String name;
     private String userId;
     private volatile boolean active = true;
@@ -26,9 +34,9 @@ class ClientSession implements Runnable {
     @Override
     public void run() {
         boolean requestedQuit = false;
-        try (Socket ignored = socket;
-             PrintWriter writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
-            output = writer;
+        boolean rejected = false;
+        try {
+            startWriter();
             BoundedLineReader input = new BoundedLineReader(socket);
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
             String requestedName = input.readLine(deadline);
@@ -39,6 +47,7 @@ class ClientSession implements Runnable {
             boolean initialObserver = ChatProtocol.OBSERVE.equals(requestedName);
             if (!initialObserver && !requestedName.startsWith("@hello:v2:")) {
                 send(ChatProtocol.ERROR_VERSION);
+                rejected = true;
                 return;
             }
             active = false;
@@ -47,11 +56,13 @@ class ClientSession implements Runnable {
                         Base64.getDecoder().decode(requestedName.substring(10)), StandardCharsets.UTF_8));
             } catch (IllegalArgumentException exception) {
                 send(ChatProtocol.ERROR_VERSION);
+                rejected = true;
                 return;
             }
             if (initialObserver) {
                 server.add(this);
             } else if (!server.join(this, name)) {
+                rejected = true;
                 return;
             }
 
@@ -135,15 +146,75 @@ class ClientSession implements Runnable {
         } catch (IOException exception) {
             // 關閉連線時由 Server 統一記錄狀態，避免重複訊息。
         } finally {
-            if (name != null) {
-                server.remove(this, requestedQuit);
-            }
+            if (rejected) drainRejection();
+            closeSocket();
+            if (writerThread != null) writerThread.interrupt();
+            if (name != null) server.remove(this, requestedQuit);
         }
     }
 
-    public synchronized void send(String message) {
-        if (output != null) {
-            output.println(message);
+    // 此方法可能在 Server 的鎖內呼叫，只加入佇列，不執行 Socket 寫入。
+    public void send(String message) {
+        byte[] bytes = (message + "\n").getBytes(StandardCharsets.UTF_8);
+        boolean overflow = false;
+        synchronized (outboundLock) {
+            if (closing.get()) return;
+            if (bytes.length > MAX_PENDING_BYTES - pendingBytes || !outbound.offer(bytes)) {
+                overflow = true;
+            } else {
+                pendingBytes += bytes.length;
+            }
+        }
+        if (overflow) requestClose();
+    }
+
+    private void startWriter() throws IOException {
+        OutputStream output = socket.getOutputStream();
+        writerThread = new Thread(() -> {
+            try {
+                while (true) {
+                    byte[] bytes = outbound.take();
+                    if (bytes == STOP) return;
+                    output.write(bytes);
+                    output.flush();
+                    synchronized (outboundLock) {
+                        pendingBytes -= bytes.length;
+                    }
+                }
+            } catch (IOException exception) {
+                closeSocket();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        }, "client-writer-" + socket.getRemoteSocketAddress());
+        writerThread.setDaemon(true);
+        writerThread.start();
+    }
+
+    // 首次握手遭拒時，讓錯誤訊息有機會送達，但不無限等待慢速連線。
+    private void drainRejection() {
+        if (writerThread == null || !outbound.offer(STOP)) return;
+        try {
+            writerThread.join(1000);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void requestClose() {
+        if (closing.compareAndSet(false, true)) {
+            Thread closer = new Thread(this::closeSocket, "slow-client-close");
+            closer.setDaemon(true);
+            closer.start();
+        }
+    }
+
+    private void closeSocket() {
+        closing.set(true);
+        try {
+            socket.close();
+        } catch (IOException ignored) {
+            // 連線可能已經關閉。
         }
     }
 

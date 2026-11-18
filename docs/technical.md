@@ -31,7 +31,7 @@ Server 對空白暱稱使用 `Anonymous`；GUI 與命令列 Client 在一般加�
 
 ## 執行緒與共享資料
 
-Server 的主執行緒執行 `accept()`。每個連線由獨立的 `ClientSession` 執行緒讀取訊息。Server 的同步方法保護加入、離開、群組操作與轉送流程；每個 Client 的 `send()` 也使用同步，避免多個執行緒同時寫入同一個輸出串流。
+Server 的主執行緒執行 `accept()`。每個連線由獨立的 `ClientSession` 執行緒讀取訊息。Server 的同步方法保護加入、離開、群組操作與訊息順序。每個 Client 有獨立的待送佇列與寫入執行緒；Server 在同步方法內只將資料加入佇列。佇列最多等待 128 筆；待送資料包含正在寫入的資料，總計最多 1 MiB。超過任一上限時會關閉該連線。
 
 GUI 在背景執行緒透過 `ChatConnection` 建立連線並讀取 Socket，再使用 `SwingUtilities.invokeLater()` 將介面更新交給 Swing 事件派送執行緒。命令列 Client 使用主執行緒接收訊息，背景執行緒讀取鍵盤。
 
@@ -106,9 +106,10 @@ Server 主控台顯示使用者加入、主動離開或連線中斷的時間與�
 `IdentityRegression` 驗證臨時 ID、私訊及群組流程。`ClientCommandRegression` 啟動命令列 Client，驗證指令、私訊與公開訊息隔離。在 Windows 專案根目錄執行：
 
 ```cmd
-javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java tests\IdentityRegression.java tests\ClientCommandRegression.java tests\GroupMembershipRegression.java tests\ServerInputRegression.java
+javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java tests\IdentityRegression.java tests\ClientCommandRegression.java tests\GroupMembershipRegression.java tests\ServerInputRegression.java tests\SlowClientRegression.java
 java -cp out IdentityRegression
 java -cp out ClientCommandRegression
 java -cp out GroupMembershipRegression
 java -cp out ServerInputRegression
+java -cp out SlowClientRegression
 ```

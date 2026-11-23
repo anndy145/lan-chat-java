@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -61,8 +61,8 @@ class ClientSession implements Runnable {
             }
             active = false;
             try {
-                name = initialObserver ? "Anonymous" : cleanName(new String(
-                        Base64.getDecoder().decode(requestedName.substring(10)), StandardCharsets.UTF_8));
+                name = initialObserver ? "Anonymous" : cleanName(ChatProtocol.decode(requestedName.substring(10)));
+
             } catch (IllegalArgumentException exception) {
                 send(ChatProtocol.ERROR_VERSION);
                 rejected = true;
@@ -94,7 +94,7 @@ class ClientSession implements Runnable {
                     server.join(this, name);
                 } else if (line.startsWith(ChatProtocol.JOIN) && !isActive()) {
                     try {
-                        String requested = new String(Base64.getDecoder().decode(line.substring(ChatProtocol.JOIN.length())), StandardCharsets.UTF_8);
+                        String requested = ChatProtocol.decode(line.substring(ChatProtocol.JOIN.length()));
                         server.join(this, cleanName(requested));
                     } catch (IllegalArgumentException exception) {
                         // 忽略格式錯誤的加入要求。
@@ -106,7 +106,7 @@ class ClientSession implements Runnable {
                             server.sendPublic(this, text);
                         }
                     } catch (IllegalArgumentException exception) {
-                        send("@notice:SW52YWxpZCBtZXNzYWdlLg==");
+                        send(ChatProtocol.NOTICE + ChatProtocol.encode("Invalid message."));
                     }
                 } else if (line.startsWith(ChatProtocol.PRIVATE) && isActive()) {
                     String[] parts = line.substring(ChatProtocol.PRIVATE.length()).split(":", 2);
@@ -125,19 +125,19 @@ class ClientSession implements Runnable {
                     String[] parts = line.substring(ChatProtocol.GROUP_CREATE.length()).split(":", 2);
                     try {
                         if (parts.length == 2 && !parts[1].isEmpty()) {
-                            String groupName = new String(Base64.getDecoder().decode(parts[0]), StandardCharsets.UTF_8).strip();
+                            String groupName = ChatProtocol.decode(parts[0]).strip();
                             String[] members = parts[1].split(",");
                             server.createGroup(this, groupName, members);
                         }
                     } catch (IllegalArgumentException exception) {
-                        send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
+                        send(ChatProtocol.NOTICE + ChatProtocol.encode("Invalid group request."));
                     }
                 } else if (line.startsWith(ChatProtocol.GROUP_ADD) && isActive()) {
                     String[] parts = line.substring(ChatProtocol.GROUP_ADD.length()).split(":", 2);
                     if (parts.length == 2 && !parts[1].isEmpty()) {
                         server.addGroupMembers(this, parts[0], parts[1].split(",", -1));
                     } else {
-                        send("@notice:SW52YWxpZCBncm91cCByZXF1ZXN0Lg==");
+                        send(ChatProtocol.NOTICE + ChatProtocol.encode("Invalid group request."));
                     }
                 } else if (line.startsWith(ChatProtocol.GROUP_MEMBERS_REQUEST) && isActive()) {
                     server.sendGroupMembers(this, line.substring(ChatProtocol.GROUP_MEMBERS_REQUEST.length()));
@@ -153,7 +153,7 @@ class ClientSession implements Runnable {
                             }
                         }
                     } catch (IllegalArgumentException exception) {
-                        send("@notice:SW52YWxpZCBncm91cCBtZXNzYWdlLg==");
+                        send(ChatProtocol.NOTICE + ChatProtocol.encode("Invalid group message."));
                     }
                 } else if (isActive() && !line.isBlank()) {
                     server.sendPublic(this, line);

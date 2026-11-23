@@ -10,8 +10,6 @@ import common.ImageWire;
 import client.ChatModel.OnlineUser;
 import java.io.IOException;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -158,9 +156,7 @@ final class ChatController {
         }
 
         model.connecting = true;
-        model.privateHistory.clear();
-        model.groupHistory.clear();
-        view.clearPrivateChats();
+        clearConversationHistory();
         model.activeName = null;
         model.activeId = null;
         long generation = ++model.connectionGeneration;
@@ -190,33 +186,17 @@ final class ChatController {
                 });
                 }, received -> {
                     if (ChatFiles.isData(received)) {
-                        try {
-                            ChatFiles.Attachment attachment = files.receive(received);
-                            if (attachment != null) SwingUtilities.invokeLater(() -> {
-                                if (model.socket != newSocket || model.observing) return;
-                                if (model.addAttachment(attachment)) view.showAttachment(attachment);
-                                else appendMessage("File history is full. Restart the client to receive more files.");
-                            });
-                        } catch (IOException exception) {
-                            SwingUtilities.invokeLater(() -> {
-                                if (model.socket == newSocket) appendMessage(exception.getMessage());
-                            });
-                        }
+                        receiveTransfer(newSocket, () -> files.receive(received),
+                                attachment -> model.addAttachment(attachment),
+                                view::showAttachment,
+                                "File history is full. Restart the client to receive more files.");
                         return;
                     }
                     if (ChatImages.isData(received)) {
-                        try {
-                            ChatImages.Picture picture = images.receive(received);
-                            if (picture != null) SwingUtilities.invokeLater(() -> {
-                                if (model.socket != newSocket || model.observing) return;
-                                if (model.addPicture(picture)) view.showPicture(picture);
-                                else appendMessage("Image history is full. Restart the client to clear it.");
-                            });
-                        } catch (IOException exception) {
-                            SwingUtilities.invokeLater(() -> {
-                                if (model.socket == newSocket) appendMessage(exception.getMessage());
-                            });
-                        }
+                        receiveTransfer(newSocket, () -> images.receive(received),
+                                picture -> model.addPicture(picture),
+                                view::showPicture,
+                                "Image history is full. Restart the client to clear it.");
                         return;
                     }
                     SwingUtilities.invokeLater(() -> {
@@ -236,9 +216,7 @@ final class ChatController {
                                 model.joining = false;
                                 model.observing = false;
                                 if (model.activeName != null && !model.activeName.equals(view.name())) {
-                                    model.privateHistory.clear();
-        model.groupHistory.clear();
-        view.clearPrivateChats();
+                                    clearConversationHistory();
                                 }
                                 model.activeName = view.name();
                                 view.setConnected(true);
@@ -273,15 +251,13 @@ final class ChatController {
                                 appendMessage("You left the group.");
                             } else if (received.startsWith(ChatProtocol.GROUP_ERROR)) {
                                 try {
-                                    view.showMessage(new String(Base64.getDecoder().decode(
-                                            received.substring(13)), StandardCharsets.UTF_8));
+                                    view.showMessage(ChatProtocol.decode(received.substring(ChatProtocol.GROUP_ERROR.length())));
                                 } catch (IllegalArgumentException exception) {
                                     appendMessage("Received an invalid notification.");
                                 }
                             } else if (received.startsWith(ChatProtocol.NOTICE)) {
                                 try {
-                                    appendMessage(new String(Base64.getDecoder().decode(received.substring(8)),
-                                            StandardCharsets.UTF_8));
+                                    appendMessage(ChatProtocol.decode(received.substring(ChatProtocol.NOTICE.length())));
                                 } catch (IllegalArgumentException exception) {
                                     appendMessage("Received an invalid notification.");
                                 }
@@ -641,29 +617,35 @@ final class ChatController {
         appendMessage("You left the chat.");
     }
 
-    void disconnected(Socket closedSocket, String message) {
-        if (model.socket == closedSocket || (model.socket == null && model.connecting)) {
-            model.socket = null;
-        resetUploads();
-        view.enableImages(false);
-        view.enableFiles(false);
-            model.output = null;
-            model.connecting = false;
-            model.joining = false;
-            model.observing = false;
-            model.activeId = null;
-            model.onlineUsers.clear();
-            view.showOnlineUsers(model.onlineUsers);
-            view.setConnected(false);
-            if (view.isDisplayable()) {
-                appendMessage(message);
-            }
+    @FunctionalInterface
+    private interface TransferParser<T> {
+        T parse() throws IOException;
+    }
+
+    private <T> void receiveTransfer(Socket expectedSocket, TransferParser<T> parser,
+                                     java.util.function.Predicate<T> store,
+                                     java.util.function.Consumer<T> display, String fullMessage) {
+        try {
+            T item = parser.parse();
+            if (item != null) SwingUtilities.invokeLater(() -> {
+                if (model.socket != expectedSocket || model.observing) return;
+                if (store.test(item)) display.accept(item);
+                else appendMessage(fullMessage);
+            });
+        } catch (IOException exception) {
+            SwingUtilities.invokeLater(() -> {
+                if (model.socket == expectedSocket) appendMessage(exception.getMessage());
+            });
         }
     }
 
-    void closeConnection() {
-        model.connectionGeneration++;
-        Socket oldSocket = model.socket;
+    private void clearConversationHistory() {
+        model.privateHistory.clear();
+        model.groupHistory.clear();
+        view.clearPrivateChats();
+    }
+
+    private void resetConnectionState() {
         model.socket = null;
         resetUploads();
         view.enableImages(false);
@@ -676,6 +658,21 @@ final class ChatController {
         model.onlineUsers.clear();
         view.showOnlineUsers(model.onlineUsers);
         view.setConnected(false);
+    }
+
+    void disconnected(Socket closedSocket, String message) {
+        if (model.socket == closedSocket || (model.socket == null && model.connecting)) {
+            resetConnectionState();
+            if (view.isDisplayable()) {
+                appendMessage(message);
+            }
+        }
+    }
+
+    void closeConnection() {
+        model.connectionGeneration++;
+        Socket oldSocket = model.socket;
+        resetConnectionState();
         closeSocket(oldSocket);
     }
 

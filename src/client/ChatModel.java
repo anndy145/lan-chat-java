@@ -15,35 +15,38 @@ final class ChatModel {
     interface Entry {}
     record Text(String value) implements Entry {}
     final Map<String, List<Entry>> privateHistory = new LinkedHashMap<>();
-    final List<Entry> lobbyImages = new ArrayList<>();
+    final List<Entry> lobbyEntries = new ArrayList<>();
     final Map<String, List<Entry>> groupHistory = new LinkedHashMap<>();
 
-    boolean addPicture(ChatImages.Picture picture) {
-        long retained = java.util.stream.Stream.concat(java.util.stream.Stream.of(lobbyImages),
+    private <T extends Entry> long retainedBytes(Class<T> type, java.util.function.ToLongFunction<T> sizeOf) {
+        return java.util.stream.Stream.concat(java.util.stream.Stream.of(lobbyEntries),
                 java.util.stream.Stream.concat(privateHistory.values().stream(), groupHistory.values().stream()))
-                .flatMap(List::stream).filter(ChatImages.Picture.class::isInstance)
-                .map(ChatImages.Picture.class::cast).mapToLong(item -> item.bytes().length + 240L * 240 * 4).sum();
-        if (retained + picture.bytes().length + 240L * 240 * 4 > 32L * 1024 * 1024) return false;
-        switch (picture.destination()) {
-            case LOBBY -> lobbyImages.add(picture);
-            case GROUP -> groupHistory.computeIfAbsent(picture.conversation(), key -> new ArrayList<>()).add(picture);
-            case PRIVATE -> privateHistory.computeIfAbsent(picture.conversation(), key -> new ArrayList<>()).add(picture);
+                .flatMap(List::stream).filter(type::isInstance).map(type::cast).mapToLong(sizeOf).sum();
+    }
+
+    private void addEntry(common.ImageWire.Destination destination, String conversation, Entry entry) {
+        switch (destination) {
+            case LOBBY -> lobbyEntries.add(entry);
+            case GROUP -> groupHistory.computeIfAbsent(conversation, key -> new ArrayList<>()).add(entry);
+            case PRIVATE -> privateHistory.computeIfAbsent(conversation, key -> new ArrayList<>()).add(entry);
         }
+    }
+
+    boolean addPicture(ChatImages.Picture picture) {
+        long size = picture.bytes().length + 240L * 240 * 4;
+        if (retainedBytes(ChatImages.Picture.class, item -> item.bytes().length + 240L * 240 * 4) + size > 32L * 1024 * 1024) {
+            return false;
+        }
+        addEntry(picture.destination(), picture.conversation(), picture);
         return true;
     }
 
     // 收到的檔案保留在記憶體供另存，總量上限避免長時間使用耗盡記憶體。
     boolean addAttachment(ChatFiles.Attachment attachment) {
-        long retained = java.util.stream.Stream.concat(java.util.stream.Stream.of(lobbyImages),
-                java.util.stream.Stream.concat(privateHistory.values().stream(), groupHistory.values().stream()))
-                .flatMap(List::stream).filter(ChatFiles.Attachment.class::isInstance)
-                .map(ChatFiles.Attachment.class::cast).mapToLong(item -> item.bytes().length).sum();
-        if (retained + attachment.bytes().length > 128L * 1024 * 1024) return false;
-        switch (attachment.destination()) {
-            case LOBBY -> lobbyImages.add(attachment);
-            case GROUP -> groupHistory.computeIfAbsent(attachment.conversation(), key -> new ArrayList<>()).add(attachment);
-            case PRIVATE -> privateHistory.computeIfAbsent(attachment.conversation(), key -> new ArrayList<>()).add(attachment);
+        if (retainedBytes(ChatFiles.Attachment.class, item -> item.bytes().length) + attachment.bytes().length > 128L * 1024 * 1024) {
+            return false;
         }
+        addEntry(attachment.destination(), attachment.conversation(), attachment);
         return true;
     }
 

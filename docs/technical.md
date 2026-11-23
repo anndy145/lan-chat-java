@@ -16,6 +16,8 @@ Server 使用 TCP `ServerSocket` 接受連線。每個 Client 透過一條 TCP S
 | `src/client/ChatConnection.java` | 建立 GUI Client 的 Socket 連線、送出初始協定訊息並讀取回應。 |
 | `src/client/Client.java` | 提供命令列介面、觀察模式與聊天指令。 |
 | `src/common/ChatProtocol.java` | 提供 Client 和 Server 共用的協定字串、Base64 編解碼及文字長度常數。 |
+| `src/common/ImageWire.java` / `FileWire.java` / `TransferWire.java` | 定義圖片與一般檔案的分塊傳輸協定前綴與大小上限。 |
+| `src/server/TransferUpload.java` | 處理單一連線的圖片與一般檔案分塊上傳、驗證與轉送。 |
 
 ## 連線與使用者狀態
 
@@ -96,6 +98,7 @@ Server 主控台顯示使用者加入、主動離開或連線中斷的時間與�
 - 暱稱最多 32 個 Unicode 碼位，文字訊息最多 2,000 個 Unicode 碼位。由多個碼位組成的表情符號可能算作多個字元。
 - Server 限制單行內容最多 16 KiB，並要求連線後 10 秒內完成第一行協定資料。完成第一行後不限制閒置等待時間。超過上限或逾時時會關閉該連線。
 - TCP 連線沒有加密，也沒有帳號驗證。Server 可以讀取轉送中的訊息。
+- 圖片傳輸單張上限為 5 MiB、2,000 萬像素；一般檔案傳輸單檔上限為 20 MiB。GUI 支援 `Ctrl+V` 貼上剪貼簿圖片與拖曳檔案傳送，收到的圖片與檔案僅暫存於記憶體供預覽或另存。
 - 暱稱僅在使用者線上時保持唯一。臨時 ID 無法驗證重新上線的人是否為同一人。
 - v2 協定與舊版不相容，需要同時更新 Server、GUI Client 和命令列 Client。
 - GUI 在 Server 斷線後不會自動重新連線。Client 與 Server 均不保存離線訊息。

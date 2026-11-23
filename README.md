@@ -1,44 +1,51 @@
 # Java 內網聊天室
 
-使用 Java TCP Socket 建立的內網文字聊天室，支援公開聊天、私訊、群組聊天與線上使用者名單，提供 Swing 圖形介面和命令列介面。
+使用 Java TCP Socket 建立的內網聊天室，支援公開聊天、私訊、群組聊天、圖片傳送與線上使用者名單，提供 Swing 圖形介面和命令列介面。
 
 程式架構與通訊協定請參考[技術文件](docs/technical.md)。
 
-## 編譯
+## Windows 免安裝版
+
+從 [GitHub Releases](https://github.com/anndy145/lan-chat-java/releases) 下載 `LanChatClient-Windows-x64.zip`。解壓縮整個 ZIP 後執行 `LanChatClient.exe`，並保留旁邊的 `app` 和 `runtime` 資料夾。
+
+### 開啟臨時伺服器
+
+1. 在主機開啟 **Connection settings**，將 **Port** 設為 `5487` 或自訂連接埠，再按 **Start temp server**。
+2. 主機要加入聊天時，在 **Server IP** 填 `127.0.0.1`，輸入暱稱後按 **Connect**。
+3. 同一區網的其他電腦填入主機 Lobby 顯示的 LAN IP、相同連接埠和自己的暱稱，再按 **Connect**。
+
+按 **Stop temp server** 或關閉開房的視窗會中斷所有連線。
+
+## 從原始碼編譯與啟動
+
+在專案根目錄編譯：
 
 ```cmd
 javac -encoding UTF-8 -d out src\common\*.java src\server\*.java src\client\*.java
 ```
 
-## 圖形介面
-
-先啟動 Server。連接埠可省略，預設為 `5487`：
-
-```cmd
-java -cp out server.Server
-```
-
-指定連接埠：
+使用獨立 Server 時，先執行以下指令。省略連接埠時預設為 `5487`。
 
 ```cmd
 java -cp out server.Server 5487
 ```
 
-再啟動 Client：
+另開終端機啟動 GUI：
 
 ```cmd
 java -cp "out;resources" client.ChatWindow
 ```
 
-輸入 Server IP、連接埠與暱稱後按 `Connect`。同一台電腦測試時，Server IP 可填 `127.0.0.1`；其他電腦請使用 Server 的內網 IPv4 位址。
+在 **Connection settings** 輸入 Server IP、連接埠與暱稱，再按 **Connect**。也能從 GUI 開啟臨時伺服器。
 
-若沒有現成的 Server，可在 Client 輸入連接埠後按 `Start temporary server`，再輸入暱稱並按 `Connect`。按 `Stop temporary server` 或關閉主機視窗會中斷所有連線。
+## 圖形介面操作
 
-雙擊線上使用者可開啟私訊。選取線上使用者並按 `Create group` 可建立群組；要邀請新成員時，先選取群組分頁，再選擇使用者並按 `Add members`。按住 Ctrl 可選取多人。新成員只會看到加入後的群組訊息。選取群組分頁後，可按 `Group members` 查看成員，或按 `Leave group` 退出；關閉分頁只會隱藏分頁。成員退出或斷線時，其餘成員會收到通知。
-
-按 `View online users` 可在不加入聊天的情況下查看名單。加入聊天後按 `Leave` 可離開聊天並繼續查看名單；按 `Dark mode` 或 `Light mode` 可切換主題。
-
-在私訊或群組分頁，按 `Send image` 選擇 PNG、JPG 或 JPEG。每張最多 5 MiB 和 2,000 萬像素。點擊對話中的縮圖可以預覽或另存原檔。命令列只顯示收圖提示。請更新 Server 和 GUI Client 以啟用圖片功能。
+- **文字**：在 Lobby、私訊或群組輸入訊息。按 **Enter** 送出，按 **Shift+Enter** 換行。貼上多行文字會保留原有換行。
+- **私訊**：雙擊左側名單的使用者，或右鍵選擇 **Open private chat**。
+- **群組**：按住 **Ctrl** 可選取多位使用者，再按分頁列的 **+** 建立群組。選取群組分頁後，可使用 **Add members**、**Group members** 和 **Leave group**。關閉分頁只會隱藏分頁，新成員只會看到加入後的訊息。
+- **線上名單**：在 **Connection settings** 按 **Observe only** 可只查看名單。要加入時按 **Join chat**。在聊天中按上方的 **Leave** 會返回觀察模式，再按設定內的 **Disconnect** 可中斷連線。
+- **圖片**：在私訊或群組分頁按輸入框左側的圖片圖示，選擇 PNG、JPG 或 JPEG。每張限 5 MiB、2,000 萬像素。點擊縮圖可預覽或另存，命令列只顯示收圖提示。
+- **主題**：點右上角的月亮或太陽圖示切換亮色與深色模式。
 
 ## 命令列介面
 
@@ -78,11 +85,11 @@ java -cp out client.Client 127.0.0.1 5487 --observe
 
 ## 發布 Windows Client
 
-推送到 `main` 時，GitHub Actions 會建置並上傳 Artifact。推送版本 tag 時，工作流程會建立同名 Release，並附上 Windows 免安裝版 ZIP：
+推送到 `main` 時，GitHub Actions 會建置並上傳 Artifact。推送版本 tag 時，工作流程會建立同名 Release，並附上 Windows 免安裝版 ZIP。以下以 `v0.8` 為例。
 
 ```powershell
-git tag v0.
-git push origin v0.
+git tag -a v0.8 -m "LAN Chat v0.8"
+git push origin v0.8
 ```
 
-若版本 tag 已存在，可在 GitHub 的 **Actions → Build Windows portable client → Run workflow** 選擇 `main`，並在 `release_tag` 輸入該 tag，例如 `v0.4`。留空則只建置、不發布。下載 ZIP 後，請解壓縮並保留 EXE 旁的 `app` 和 `runtime` 資料夾。
+若版本 tag 已存在，可在 GitHub 的 **Actions → Build Windows portable client → Run workflow** 選擇 `main`，並在 `release_tag` 輸入該 tag，例如 `v0.4`。留空則只建置、不發布。

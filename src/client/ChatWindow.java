@@ -78,7 +78,7 @@ public class ChatWindow extends JFrame {
             super.paintComponent(graphics);
             if (getDocument().getLength() != 0) return;
             Graphics hint = graphics.create();
-            hint.setColor(mutedColor());
+            hint.setColor(theme.mutedColor());
             var metrics = hint.getFontMetrics(getFont());
             hint.drawString("Type a message...", getInsets().left,
                     getInsets().top + metrics.getAscent());
@@ -116,25 +116,7 @@ public class ChatWindow extends JFrame {
     private final JPopupMenu userMenu = new JPopupMenu();
     private static final Object TRANSCRIPT_ROLE = new Object();
     private int displayedLobbyLength;
-    private boolean darkMode;
-    private final Map<String, Object> lightThemeDefaults = new LinkedHashMap<>();
-
-    private static final String[] THEME_KEYS = {
-            "control", "info", "text", "nimbusBase", "nimbusBlueGrey", "nimbusLightBackground",
-            "Panel.background", "Label.foreground", "Button.background", "Button.foreground",
-            "Button.select", "Button.disabledText", "Button.focus", "Button.gradient", "TextField.background",
-            "TextField.foreground", "TextField.inactiveBackground", "TextField.inactiveForeground",
-            "TextField.caretForeground", "TextField.selectionBackground", "TextField.selectionForeground",
-            "TextArea.background", "TextPane.background", "TextArea.foreground", "TextPane.foreground",
-            "TextArea.caretForeground", "TextPane.caretForeground",
-            "TextArea.selectionBackground", "TextPane.selectionBackground", "TextArea.selectionForeground",
-            "TextPane.selectionForeground", "List.background", "List.foreground",
-            "List.selectionBackground", "List.selectionForeground", "TabbedPane.background", "TabbedPane.foreground",
-            "TabbedPane.selected", "TabbedPane.contentAreaColor", "TabbedPane.unselectedBackground",
-            "TabbedPane.focus", "TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow",
-            "TabbedPane.darkShadow", "ScrollPane.background", "Viewport.background", "OptionPane.background",
-            "OptionPane.messageForeground", "ToolTip.background", "ToolTip.foreground"
-    };
+    private final ChatTheme theme = new ChatTheme();
 
     static final class PrivateChat {
         final String name;
@@ -158,8 +140,6 @@ public class ChatWindow extends JFrame {
         setMinimumSize(new Dimension(760, 420));
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        for (String key : THEME_KEYS)
-            lightThemeDefaults.put(key, UIManager.get(key));
 
         JPanel root = new JPanel(new BorderLayout(12, 12));
         root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -177,7 +157,7 @@ public class ChatWindow extends JFrame {
         sendButton.addActionListener(event -> controller.sendMessage());
         imageButton.addActionListener(event -> controller.sendPicture());
         fileButton.addActionListener(event -> controller.sendFile());
-        inputField.setTransferHandler(new AttachmentTransferHandler(inputField.getTransferHandler()));
+        inputField.setTransferHandler(new AttachmentTransferHandler(inputField.getTransferHandler(), this, controller));
         chats.addChangeListener(event -> {
             clearUnread(chats.getSelectedComponent());
             refreshImageButton();
@@ -242,7 +222,7 @@ public class ChatWindow extends JFrame {
         connectionActions.add(connectButton);
         connectionActions.add(viewUsersButton);
         connectionActions.add(hostButton);
-        settingsPanel.setBorder(new ControlBorder(new Insets(8, 8, 8, 8)));
+        settingsPanel.setBorder(theme.controlBorder(new Insets(8, 8, 8, 8)));
         settingsPanel.add(fields, BorderLayout.CENTER);
         settingsPanel.add(connectionActions, BorderLayout.SOUTH);
         settingsPanel.setVisible(false);
@@ -354,7 +334,7 @@ public class ChatWindow extends JFrame {
         inputField.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
         inputField.setToolTipText("Enter to send; Shift+Enter for a new line; paste or drop files to send them");
         JScrollPane inputScroll = new JScrollPane(inputField);
-        inputScroll.setBorder(new ControlBorder(new Insets(1, 1, 1, 1)));
+        inputScroll.setBorder(theme.controlBorder(new Insets(1, 1, 1, 1)));
         composer.add(inputScroll, BorderLayout.CENTER);
         composer.add(sendButton, BorderLayout.EAST);
         JPanel conversation = new JPanel(new BorderLayout(0, 10));
@@ -380,68 +360,12 @@ public class ChatWindow extends JFrame {
 
     // 只變更介面顏色，不改變聊天室資料或連線狀態。
     private void toggleTheme() {
-        darkMode = !darkMode;
+        theme.toggle();
         applyTheme();
     }
 
     private void applyTheme() {
-        if (darkMode) {
-            // 參考 Facebook 深色介面的灰黑層次與藍色強調色。
-            ColorUIResource background = new ColorUIResource(Color.BLACK);
-            ColorUIResource surface = new ColorUIResource(Color.BLACK);
-            ColorUIResource button = new ColorUIResource(58, 59, 60);
-            ColorUIResource input = new ColorUIResource(Color.BLACK);
-            ColorUIResource text = new ColorUIResource(228, 230, 235);
-            ColorUIResource disabled = new ColorUIResource(176, 179, 184);
-            ColorUIResource selected = new ColorUIResource(29, 84, 142);
-            ColorUIResource focus = new ColorUIResource(45, 136, 255);
-            // Metal 預設的淺色漸層會讓白字按鈕看不清楚。
-            UIManager.put("Button.gradient", java.util.List.of(0f, 0f, button, button, button));
-            for (String key : new String[] { "control", "Panel.background", "OptionPane.background",
-                    "ScrollPane.background",
-                    "Viewport.background", "TabbedPane.background", "TabbedPane.contentAreaColor", "nimbusBlueGrey" }) {
-                UIManager.put(key, background);
-            }
-            UIManager.put("Button.background", button);
-            for (String key : new String[] { "TabbedPane.selected", "TabbedPane.unselectedBackground",
-                    "info", "ToolTip.background", "nimbusBase" })
-                UIManager.put(key, surface);
-            for (String key : new String[] { "text", "TextField.background", "TextField.inactiveBackground",
-                    "TextArea.background", "TextPane.background", "List.background", "nimbusLightBackground" })
-                UIManager.put(key, input);
-            for (String key : new String[] { "Label.foreground", "Button.foreground", "TextField.foreground",
-                    "TextField.caretForeground", "TextArea.foreground", "TextPane.foreground",
-                    "TextArea.caretForeground", "TextPane.caretForeground", "List.foreground",
-                    "TabbedPane.foreground", "OptionPane.messageForeground", "ToolTip.foreground",
-                    "TextField.selectionForeground", "TextArea.selectionForeground", "TextPane.selectionForeground",
-                    "List.selectionForeground" }) {
-                UIManager.put(key, text);
-            }
-            for (String key : new String[] { "Button.disabledText", "TextField.inactiveForeground" })
-                UIManager.put(key, disabled);
-            for (String key : new String[] { "TextField.selectionBackground", "TextArea.selectionBackground",
-                    "TextPane.selectionBackground",
-                    "List.selectionBackground", "Button.select" }) {
-                UIManager.put(key, selected);
-            }
-            UIManager.put("Button.focus", focus);
-            UIManager.put("TabbedPane.focus", focus);
-            for (String key : new String[] { "TabbedPane.light", "TabbedPane.highlight", "TabbedPane.shadow",
-                    "TabbedPane.darkShadow" }) {
-                UIManager.put(key, surface);
-            }
-        } else {
-            lightThemeDefaults.forEach(UIManager::put);
-            ColorUIResource white = new ColorUIResource(Color.WHITE);
-            for (String key : new String[] { "control", "Panel.background", "OptionPane.background",
-                    "ScrollPane.background", "Viewport.background", "TabbedPane.background",
-                    "TabbedPane.contentAreaColor", "TabbedPane.selected", "TabbedPane.unselectedBackground",
-                    "TextField.background", "TextField.inactiveBackground", "TextArea.background",
-                    "TextPane.background", "List.background" }) {
-                UIManager.put(key, white);
-            }
-        }
-        UIManager.put("TabbedPane.tabInsets", new javax.swing.plaf.InsetsUIResource(4, 8, 4, 8));
+        theme.applyUiDefaults();
         SwingUtilities.updateComponentTreeUI(this);
         // 已隱藏的分頁不在視窗元件樹內，也必須一起更新。
         for (PrivateChat chat : privateChats.values())
@@ -469,12 +393,12 @@ public class ChatWindow extends JFrame {
                 // The transcript's scroll pane supplies the single visible border.
             }
         });
-        themeButton.setIcon(new WindowIcon(false));
-        imageButton.setIcon(new WindowIcon(true));
-        fileButton.setIcon(new DocumentIcon());
-        transferLabel.setForeground(mutedColor());
-        describeButton(themeButton, darkMode ? "Switch to light mode" : "Switch to dark mode");
-        rosterPanel.setBackground(darkMode ? new Color(0x181B22) : new Color(0xF5F7FA));
+        themeButton.setIcon(ChatIcons.themeToggle(theme));
+        imageButton.setIcon(ChatIcons.image(theme));
+        fileButton.setIcon(ChatIcons.document(theme));
+        transferLabel.setForeground(theme.mutedColor());
+        describeButton(themeButton, theme.isDarkMode() ? "Switch to light mode" : "Switch to dark mode");
+        rosterPanel.setBackground(theme.rosterBackground());
         usersList.setBackground(rosterPanel.getBackground());
         updateTranscriptColors(chatArea);
         for (PrivateChat chat : privateChats.values()) updateTranscriptColors(chat.area);
@@ -486,11 +410,16 @@ public class ChatWindow extends JFrame {
     }
 
     private void applyControlStyle() {
-        styleMainButton(connectButton, true);
-        styleMainButton(sendButton, true);
-        for (JButton button : List.of(viewUsersButton, hostButton, themeButton, imageButton, fileButton, leaveButton,
-                settingsButton, createGroupButton, addMembersButton, groupMembersButton, leaveGroupButton)) {
-            styleMainButton(button, false);
+        theme.styleMainButton(connectButton, true, false, CONNECT_LABEL, JOIN_LABEL);
+        theme.styleMainButton(sendButton, true, false);
+        theme.styleMainButton(hostButton, false, false, "Start temp server", "Stop temp server");
+        theme.styleMainButton(viewUsersButton, false, false, "Observe only", "Disconnect");
+        for (JButton button : List.of(themeButton, imageButton, fileButton,
+                settingsButton, createGroupButton, addMembersButton, groupMembersButton)) {
+            theme.styleMainButton(button, false, false);
+        }
+        for (JButton button : List.of(leaveButton, leaveGroupButton)) {
+            theme.styleMainButton(button, false, true);
         }
         for (JButton button : List.of(themeButton, imageButton, fileButton))
             button.setPreferredSize(new Dimension(BUTTON_HEIGHT, BUTTON_HEIGHT));
@@ -500,128 +429,20 @@ public class ChatWindow extends JFrame {
             if (chats.getTabComponentAt(index) instanceof JPanel header) {
                 for (Component component : header.getComponents()) {
                     if (component instanceof JButton button) {
-                        styleButton(button, false);
+                        theme.styleButton(button, false, false);
                     }
                 }
             }
         }
         for (JTextField field : List.of(hostField, portField, nameField)) {
-            field.setBorder(new ControlBorder(new Insets(4, 7, 4, 7)));
+            field.setBorder(theme.controlBorder(new Insets(4, 7, 4, 7)));
         }
     }
 
     private JScrollPane createContentScroll(Component content) {
         JScrollPane scroll = new JScrollPane(content);
-        scroll.setBorder(new ControlBorder(new Insets(4, 4, 4, 4)));
+        scroll.setBorder(theme.controlBorder(new Insets(4, 4, 4, 4)));
         return scroll;
-    }
-
-    private final class ControlBorder extends AbstractBorder {
-        private final Insets padding;
-
-        ControlBorder(Insets padding) {
-            this.padding = padding;
-        }
-
-        @Override
-        public Insets getBorderInsets(Component component, Insets insets) {
-            insets.set(padding.top, padding.left, padding.bottom, padding.right);
-            return insets;
-        }
-
-        @Override
-        public void paintBorder(Component component, Graphics graphics, int x, int y, int width, int height) {
-            boolean focused = component.hasFocus();
-            Graphics2D outline = (Graphics2D) graphics.create();
-            outline.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            outline.setColor(focused ? focusColor() : darkMode ? new Color(0x626B78) : new Color(0x8793A4));
-            outline.drawRoundRect(x, y, width - 1, height - 1, 8, 8);
-            if (focused) {
-                outline.drawRoundRect(x + 1, y + 1, width - 3, height - 3, 7, 7);
-            }
-            outline.dispose();
-        }
-    }
-
-    private Color focusColor() {
-        return darkMode ? new Color(0x8ABBFF) : new Color(0x1446B3);
-    }
-
-    private void styleMainButton(JButton button, boolean primary) {
-        styleButton(button, primary);
-        button.setPreferredSize(null);
-        int width = button.getPreferredSize().width;
-        if (button == connectButton) {
-            var metrics = button.getFontMetrics(button.getFont());
-            width += Math.max(metrics.stringWidth(CONNECT_LABEL), metrics.stringWidth(JOIN_LABEL))
-                    - metrics.stringWidth(button.getText());
-        } else if (button == hostButton) {
-            var metrics = button.getFontMetrics(button.getFont());
-            width += Math.max(metrics.stringWidth("Start temp server"), metrics.stringWidth("Stop temp server"))
-                    - metrics.stringWidth(button.getText());
-        } else if (button == viewUsersButton) {
-            var metrics = button.getFontMetrics(button.getFont());
-            width += Math.max(metrics.stringWidth("Observe only"), metrics.stringWidth("Disconnect"))
-                    - metrics.stringWidth(button.getText());
-        }
-        button.setPreferredSize(new Dimension(width + 8, BUTTON_HEIGHT));
-    }
-
-    private void styleButton(JButton button, boolean primary) {
-        boolean danger = button == leaveButton || button == leaveGroupButton;
-        button.setUI(new BasicButtonUI() {
-            @Override
-            public void paint(Graphics graphics, javax.swing.JComponent component) {
-                var state = button.getModel();
-                Color fill = darkMode ? Color.BLACK : Color.WHITE;
-                if (state.isEnabled()) {
-                    if (primary) {
-                        fill = darkMode ? new Color(0x245AB8) : new Color(0x2355B9);
-                    }
-                    if (state.isArmed() && state.isPressed()) {
-                        fill = primary ? fill.darker() : darkMode ? new Color(0x303238) : new Color(0xD3DEED);
-                    } else if (state.isRollover()) {
-                        fill = primary ? fill.brighter() : darkMode ? new Color(0x24272D) : new Color(0xE0E8F4);
-                    }
-                }
-                if (!state.isEnabled()) {
-                    fill = darkMode ? new Color(0x24262B) : new Color(0xEFEFEF);
-                } else if (danger && state.isRollover()) {
-                    fill = darkMode ? new Color(0x412427) : new Color(0xFFE8E8);
-                }
-                Graphics2D shape = (Graphics2D) graphics.create();
-                shape.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                shape.setColor(fill);
-                shape.fillRoundRect(0, 0, component.getWidth(), component.getHeight(), 8, 8);
-                shape.setColor(danger && state.isEnabled() ? dangerColor()
-                        : darkMode ? new Color(0x737D8D) : new Color(0x8793A4));
-                shape.drawRoundRect(0, 0, component.getWidth() - 1, component.getHeight() - 1, 8, 8);
-                if (button.hasFocus()) {
-                    shape.setColor(primary && state.isEnabled() ? Color.WHITE : focusColor());
-                    shape.drawRoundRect(2, 2, component.getWidth() - 5, component.getHeight() - 5, 5, 5);
-                }
-                shape.dispose();
-                super.paint(graphics, component);
-            }
-
-            @Override
-            protected void paintText(Graphics graphics, javax.swing.AbstractButton control,
-                    java.awt.Rectangle bounds, String text) {
-                // BasicButtonUI 會使用元件的前景色；主按鈕使用白字以維持對比。
-                if (primary || danger || !control.isEnabled()) {
-                    graphics.setColor(!control.isEnabled() ? mutedColor() : danger ? dangerColor() : Color.WHITE);
-                    javax.swing.plaf.basic.BasicGraphicsUtils.drawStringUnderlineCharAt(graphics, text,
-                            control.getDisplayedMnemonicIndex(), bounds.x,
-                            bounds.y + graphics.getFontMetrics().getAscent());
-                } else {
-                    super.paintText(graphics, control, bounds, text);
-                }
-            }
-        });
-        button.setContentAreaFilled(false);
-        button.setOpaque(false);
-        button.setBorderPainted(false);
-        button.setRolloverEnabled(true);
     }
 
     void showMessage(String message) {
@@ -740,55 +561,12 @@ public class ChatWindow extends JFrame {
         markUnread(chat.pane);
     }
 
-    private Color mutedColor() {
-        return darkMode ? new Color(0xA9B2C3) : new Color(0x566273);
-    }
-
-    private Color dangerColor() {
-        return darkMode ? new Color(0xFFA3A3) : new Color(0xA32832);
-    }
-
-    private final class WindowIcon implements Icon {
-        private final boolean attachment;
-
-        WindowIcon(boolean attachment) { this.attachment = attachment; }
-
-        @Override public int getIconWidth() { return 18; }
-        @Override public int getIconHeight() { return 18; }
-
-        @Override
-        public void paintIcon(Component component, Graphics graphics, int x, int y) {
-            Graphics2D drawing = (Graphics2D) graphics.create();
-            drawing.translate(x, y);
-            drawing.setColor(component.isEnabled() ? component.getForeground() : mutedColor());
-            drawing.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            drawing.setStroke(new java.awt.BasicStroke(1.5f));
-            if (attachment) {
-                drawing.drawRoundRect(1, 2, 15, 13, 3, 3);
-                drawing.drawOval(4, 5, 2, 2);
-                drawing.drawPolyline(new int[]{3, 8, 11, 14}, new int[]{12, 8, 12, 9}, 4);
-            } else if (darkMode) {
-                drawing.drawOval(5, 5, 8, 8);
-                for (int angle = 0; angle < 360; angle += 45) {
-                    double radians = Math.toRadians(angle);
-                    drawing.drawLine(9 + (int) Math.round(6 * Math.cos(radians)),
-                            9 + (int) Math.round(6 * Math.sin(radians)),
-                            9 + (int) Math.round(8 * Math.cos(radians)),
-                            9 + (int) Math.round(8 * Math.sin(radians)));
-                }
-            } else {
-                drawing.draw(new Arc2D.Double(2, 2, 14, 14, 75, 265, Arc2D.OPEN));
-                drawing.draw(new Arc2D.Double(6, 0, 12, 13, 105, 155, Arc2D.OPEN));
-            }
-            drawing.dispose();
-        }
-    }
 
     private void configureTranscript(JTextPane pane) {
         pane.setEditable(false);
         pane.setMargin(new Insets(8, 10, 8, 10));
         // 將檔案拖曳到聊天內容區也能傳送；保留原本的文字選取與複製功能。
-        pane.setTransferHandler(new AttachmentTransferHandler(pane.getTransferHandler()));
+        pane.setTransferHandler(new AttachmentTransferHandler(pane.getTransferHandler(), this, controller));
 
     }
 
@@ -809,13 +587,13 @@ public class ChatWindow extends JFrame {
         attributes.addAttribute(TRANSCRIPT_ROLE, role);
         if (role.equals("body") || role.equals("braille")) {
             if (role.equals("braille")) StyleConstants.setFontFamily(attributes, java.awt.Font.MONOSPACED);
-            StyleConstants.setForeground(attributes, darkMode ? new Color(0xE4E6EB) : new Color(0x20242C));
+            StyleConstants.setForeground(attributes, theme.bodyTextColor());
         } else if (role.equals("sender")) {
             StyleConstants.setBold(attributes, true);
-            StyleConstants.setForeground(attributes, darkMode ? new Color(0xA5C6FF) : new Color(0x244D9E));
+            StyleConstants.setForeground(attributes, theme.senderTextColor());
         } else {
             StyleConstants.setFontSize(attributes, 11);
-            StyleConstants.setForeground(attributes, mutedColor());
+            StyleConstants.setForeground(attributes, theme.mutedColor());
         }
         return attributes;
     }
@@ -978,7 +756,7 @@ public class ChatWindow extends JFrame {
         JTextPane pane = (JTextPane) scroll.getViewport().getView();
         appendText(pane, file.sender() + " shared a file", false);
         JButton button = new JButton(file.filename() + "   " + ChatFiles.size(file.bytes().length) + "   Save...",
-                new DocumentIcon());
+                ChatIcons.document(theme));
         button.setIconTextGap(8);
         button.setToolTipText("Save " + file.filename());
         button.getAccessibleContext().setAccessibleName("Save file " + file.filename());
@@ -1037,88 +815,6 @@ public class ChatWindow extends JFrame {
         });
     }
 
-    /** 接受拖曳或貼上的檔案與剪貼簿圖片，其他資料交給原本的文字處理器。 */
-    private final class AttachmentTransferHandler extends javax.swing.TransferHandler {
-        private final javax.swing.TransferHandler delegate;
-
-        AttachmentTransferHandler(javax.swing.TransferHandler delegate) {
-            this.delegate = delegate;
-        }
-
-        private boolean pastedImage(TransferSupport support) {
-            // 試算表等程式會同時提供文字與圖片，此時保留文字貼上。
-            return support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.imageFlavor)
-                    && !support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.stringFlavor);
-        }
-
-        @Override
-        public boolean canImport(TransferSupport support) {
-            if (support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor))
-                return imagesAllowedHere() || filesAllowed();
-            if (pastedImage(support)) return imagesAllowedHere();
-            return delegate != null && delegate.canImport(support);
-        }
-
-        @Override
-        public boolean importData(TransferSupport support) {
-            try {
-                var transferable = support.getTransferable();
-                if (support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor)) {
-                    if (!imagesAllowedHere() && !filesAllowed()) return false;
-                    List<?> files = (List<?>) transferable.getTransferData(java.awt.datatransfer.DataFlavor.javaFileListFlavor);
-                    List<Path> paths = files.stream().filter(java.io.File.class::isInstance)
-                            .map(file -> ((java.io.File) file).toPath()).toList();
-                    // 延後顯示確認視窗，讓拖放操作先完成。
-                    SwingUtilities.invokeLater(() -> controller.sendDroppedFiles(paths));
-                    return true;
-                }
-                if (pastedImage(support)) {
-                    if (!imagesAllowedHere()) return false;
-                    var image = (java.awt.Image) transferable.getTransferData(java.awt.datatransfer.DataFlavor.imageFlavor);
-                    SwingUtilities.invokeLater(() -> controller.sendPastedImage(image));
-                    return true;
-                }
-            } catch (java.awt.datatransfer.UnsupportedFlavorException | IOException | ClassCastException exception) {
-                showMessage("Could not read the pasted or dropped content.");
-                return false;
-            }
-            return delegate != null && delegate.importData(support);
-        }
-
-        @Override
-        public int getSourceActions(JComponent component) {
-            return delegate == null ? NONE : delegate.getSourceActions(component);
-        }
-
-        @Override
-        public void exportAsDrag(JComponent component, java.awt.event.InputEvent event, int action) {
-            if (delegate != null) delegate.exportAsDrag(component, event, action);
-        }
-
-        @Override
-        public void exportToClipboard(JComponent component, java.awt.datatransfer.Clipboard clipboard, int action) {
-            if (delegate != null) delegate.exportToClipboard(component, clipboard, action);
-        }
-    }
-
-    private final class DocumentIcon implements Icon {
-        @Override public int getIconWidth() { return 18; }
-        @Override public int getIconHeight() { return 18; }
-
-        @Override
-        public void paintIcon(Component component, Graphics graphics, int x, int y) {
-            Graphics2D drawing = (Graphics2D) graphics.create();
-            drawing.translate(x, y);
-            drawing.setColor(component.isEnabled() ? component.getForeground() : mutedColor());
-            drawing.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            drawing.setStroke(new java.awt.BasicStroke(1.5f));
-            drawing.drawPolygon(new int[]{3, 11, 15, 15, 3}, new int[]{1, 1, 5, 17, 17}, 5);
-            drawing.drawPolyline(new int[]{11, 11, 15}, new int[]{1, 5, 5}, 3);
-            drawing.drawLine(6, 9, 12, 9);
-            drawing.drawLine(6, 12, 12, 12);
-            drawing.dispose();
-        }
-    }
 
     void showOnlineUsers(List<OnlineUser> users) {
         List<OnlineUser> selected = usersList.getSelectedValuesList();
@@ -1190,7 +886,7 @@ public class ChatWindow extends JFrame {
         closeButton.setPreferredSize(new java.awt.Dimension(18, 18));
         closeButton.setMargin(new Insets(0, 0, 0, 0));
         closeButton.setFocusable(false);
-        styleButton(closeButton, false);
+        theme.styleButton(closeButton, false, false);
         closeButton.setToolTipText("Close chat tab");
         closeButton.getAccessibleContext().setAccessibleName("Close chat tab: " + name);
         closeButton.addActionListener(event -> {
@@ -1267,8 +963,7 @@ public class ChatWindow extends JFrame {
         String user = live && !model.observing && model.activeName != null ? "  (" + model.activeName + ")" : "";
         statusLabel.setText("\u25CF  " + state + endpoint + user);
         statusLabel.setToolTipText(statusLabel.getText());
-        statusLabel.setForeground(busy ? (darkMode ? new Color(0xF2C36B) : new Color(0x8A5800))
-                : live ? (darkMode ? new Color(0x73D8A4) : new Color(0x176347)) : mutedColor());
+        statusLabel.setForeground(theme.statusColor(busy, live));
         rosterTitle.setText("Online members (" + onlineUsers.size() + ")");
     }
 

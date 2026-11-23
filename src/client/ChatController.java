@@ -200,71 +200,7 @@ final class ChatController {
                         return;
                     }
                     SwingUtilities.invokeLater(() -> {
-                        if (model.socket == newSocket) {
-                            if (received.equals(ImageWire.READY)) {
-                                view.enableImages(true);
-                            } else if (received.equals(ImageWire.READY_LOBBY)) {
-                                view.enableLobbyImages(true);
-                            } else if (received.equals(FileWire.READY)) {
-                                view.enableFiles(true);
-                            } else if (received.startsWith(ImageWire.RESULT) || received.startsWith(FileWire.RESULT)) {
-                                showTransferResult(received);
-                            } else if (received.startsWith(ImageWire.NOTICE)) {
-                                appendMessage(ChatProtocol.decode(received.substring(ImageWire.NOTICE.length())));
-                            } else if (received.startsWith(ChatProtocol.JOINED)) {
-                                model.activeId = received.substring(8);
-                                model.joining = false;
-                                model.observing = false;
-                                if (model.activeName != null && !model.activeName.equals(view.name())) {
-                                    clearConversationHistory();
-                                }
-                                model.activeName = view.name();
-                                view.setConnected(true);
-                                appendMessage("You joined the chat.");
-                            } else if (received.equals(ChatProtocol.ERROR_NAME_LENGTH)) {
-                                model.joining = false;
-                                model.observing = true;
-                                view.setConnected(false);
-                                view.showMessage("Name must be at most 32 characters.");
-                            } else if (received.equals(ChatProtocol.ERROR_MESSAGE_LENGTH)) {
-                                view.showMessage("Message must be at most 2000 characters.");
-                            } else if (received.equals(ChatProtocol.ERROR_NAME)) {
-                                model.joining = false;
-                                model.observing = true;
-                                view.setConnected(false);
-                                appendMessage("That name is already in use. Choose another name.");
-                            } else if (received.equals(ChatProtocol.ERROR_VERSION) || received.equals("@joined")) {
-                                appendMessage("Incompatible server version. Update both server and client.");
-                                closeConnection();
-                            } else if (received.startsWith(ChatProtocol.USERS)) {
-                                updateOnlineUsers(received.substring(7));
-                            } else if (received.startsWith(ChatProtocol.PRIVATE_MESSAGE) && !model.observing) {
-                                receivePrivate(received);
-                            } else if (received.startsWith(ChatProtocol.GROUP_MESSAGE) && !model.observing) {
-                                receiveGroup(received);
-                            } else if (received.startsWith(ChatProtocol.GROUP_MEMBERS) && !model.observing) {
-                                receiveGroupMembers(received);
-                            } else if (received.startsWith(ChatProtocol.GROUP_LEFT)) {
-                                String id = received.substring(ChatProtocol.GROUP_LEFT.length());
-                                model.groupHistory.remove(id);
-                                view.removeGroupChat(id);
-                                appendMessage("You left the group.");
-                            } else if (received.startsWith(ChatProtocol.GROUP_ERROR)) {
-                                try {
-                                    view.showMessage(ChatProtocol.decode(received.substring(ChatProtocol.GROUP_ERROR.length())));
-                                } catch (IllegalArgumentException exception) {
-                                    appendMessage("Received an invalid notification.");
-                                }
-                            } else if (received.startsWith(ChatProtocol.NOTICE)) {
-                                try {
-                                    appendMessage(ChatProtocol.decode(received.substring(ChatProtocol.NOTICE.length())));
-                                } catch (IllegalArgumentException exception) {
-                                    appendMessage("Received an invalid notification.");
-                                }
-                            } else if (!model.observing) {
-                                appendMessage(received);
-                            }
-                        }
+                        if (model.socket == newSocket) handleServerLine(received);
                     });
                 });
                 SwingUtilities.invokeLater(() -> {
@@ -617,6 +553,75 @@ final class ChatController {
         appendMessage("You left the chat.");
     }
 
+    private void handleServerLine(String received) {
+        if (received.equals(ImageWire.READY)) {
+            view.enableImages(true);
+        } else if (received.equals(ImageWire.READY_LOBBY)) {
+            view.enableLobbyImages(true);
+        } else if (received.equals(FileWire.READY)) {
+            view.enableFiles(true);
+        } else if (received.startsWith(ImageWire.RESULT) || received.startsWith(FileWire.RESULT)) {
+            showTransferResult(received);
+        } else if (received.startsWith(ImageWire.NOTICE)) {
+            appendMessage(ChatProtocol.decode(received.substring(ImageWire.NOTICE.length())));
+        } else if (received.startsWith(ChatProtocol.JOINED)) {
+            model.activeId = received.substring(ChatProtocol.JOINED.length());
+            model.joining = false;
+            model.observing = false;
+            if (model.activeName != null && !model.activeName.equals(view.name())) {
+                clearConversationHistory();
+            }
+            model.activeName = view.name();
+            view.setConnected(true);
+            appendMessage("You joined the chat.");
+        } else if (received.equals(ChatProtocol.ERROR_NAME_LENGTH)) {
+            rejectJoin("Name must be at most 32 characters.", true);
+        } else if (received.equals(ChatProtocol.ERROR_MESSAGE_LENGTH)) {
+            view.showMessage("Message must be at most 2000 characters.");
+        } else if (received.equals(ChatProtocol.ERROR_NAME)) {
+            rejectJoin("That name is already in use. Choose another name.", false);
+        } else if (received.equals(ChatProtocol.ERROR_VERSION) || received.equals("@joined")) {
+            appendMessage("Incompatible server version. Update both server and client.");
+            closeConnection();
+        } else if (received.startsWith(ChatProtocol.USERS)) {
+            updateOnlineUsers(received.substring(ChatProtocol.USERS.length()));
+        } else if (received.startsWith(ChatProtocol.PRIVATE_MESSAGE) && !model.observing) {
+            receivePrivate(received);
+        } else if (received.startsWith(ChatProtocol.GROUP_MESSAGE) && !model.observing) {
+            receiveGroup(received);
+        } else if (received.startsWith(ChatProtocol.GROUP_MEMBERS) && !model.observing) {
+            receiveGroupMembers(received);
+        } else if (received.startsWith(ChatProtocol.GROUP_LEFT)) {
+            String id = received.substring(ChatProtocol.GROUP_LEFT.length());
+            model.groupHistory.remove(id);
+            view.removeGroupChat(id);
+            appendMessage("You left the group.");
+        } else if (received.startsWith(ChatProtocol.GROUP_ERROR)) {
+            decodeNotice(received.substring(ChatProtocol.GROUP_ERROR.length()), true);
+        } else if (received.startsWith(ChatProtocol.NOTICE)) {
+            decodeNotice(received.substring(ChatProtocol.NOTICE.length()), false);
+        } else if (!model.observing) {
+            appendMessage(received);
+        }
+    }
+
+    private void rejectJoin(String message, boolean dialog) {
+        model.joining = false;
+        model.observing = true;
+        view.setConnected(false);
+        if (dialog) view.showMessage(message);
+        else appendMessage(message);
+    }
+
+    private void decodeNotice(String encoded, boolean dialog) {
+        try {
+            String text = ChatProtocol.decode(encoded);
+            if (dialog) view.showMessage(text);
+            else appendMessage(text);
+        } catch (IllegalArgumentException exception) {
+            appendMessage("Received an invalid notification.");
+        }
+    }
     @FunctionalInterface
     private interface TransferParser<T> {
         T parse() throws IOException;

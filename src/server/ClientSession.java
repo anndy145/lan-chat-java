@@ -1,6 +1,7 @@
 package server;
 
 import common.ChatProtocol;
+import common.ImageWire;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -15,6 +16,8 @@ class ClientSession implements Runnable {
     private final Socket socket;
     private final Server server;
     volatile boolean receivesImages;
+    volatile boolean receivesLobbyImages;
+    long activeVersion;
     long groupDepartureVersion;
     boolean isClosing() { return closing.get(); }
     private static final int MAX_PENDING_MESSAGES = 128;
@@ -257,11 +260,16 @@ class ClientSession implements Runnable {
         this.name = name;
     }
 
+    long imageRouteVersion(ImageWire.Destination destination) {
+        return destination == ImageWire.Destination.LOBBY ? activeVersion : groupDepartureVersion;
+    }
+
     boolean isActive() {
         return active;
     }
 
     void setActive(boolean active) {
+        if (this.active != active) activeVersion++;
         this.active = active;
     }
 

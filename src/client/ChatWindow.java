@@ -87,6 +87,7 @@ public class ChatWindow extends JFrame {
     };
     private final JButton imageButton = new JButton();
     private boolean imagesEnabled;
+    private boolean lobbyImagesEnabled;
     private boolean imageBusy;
     final JButton sendButton = new JButton("Send");
     final JButton leaveButton = new JButton("Leave");
@@ -846,6 +847,12 @@ public class ChatWindow extends JFrame {
 
     void enableImages(boolean enabled) {
         imagesEnabled = enabled;
+        if (!enabled) lobbyImagesEnabled = false;
+        refreshImageButton();
+    }
+
+    void enableLobbyImages(boolean enabled) {
+        lobbyImagesEnabled = enabled;
         refreshImageButton();
     }
 
@@ -856,7 +863,7 @@ public class ChatWindow extends JFrame {
 
     private void refreshImageButton() {
         imageButton.setEnabled(imagesEnabled && !imageBusy && sendButton.isEnabled()
-                && (selectedPrivateId() != null || selectedGroupId() != null));
+                && (isLobbySelected() ? lobbyImagesEnabled : selectedPrivateId() != null || selectedGroupId() != null));
     }
 
     Path choosePicture() {
@@ -868,8 +875,11 @@ public class ChatWindow extends JFrame {
     }
 
     void showPicture(ChatImages.Picture picture) {
-        JScrollPane scroll = picture.group() ? groupChat(picture.conversation(), picture.title())
-                : privateChat(picture.conversation(), picture.title()).pane;
+        JScrollPane scroll = switch (picture.destination()) {
+            case LOBBY -> (JScrollPane) chats.getComponentAt(0);
+            case GROUP -> groupChat(picture.conversation(), picture.title());
+            case PRIVATE -> privateChat(picture.conversation(), picture.title()).pane;
+        };
         JTextPane pane = (JTextPane) scroll.getViewport().getView();
         appendText(pane, picture.sender() + ": " + picture.filename(), false);
         JButton thumbnail = new JButton(new ImageIcon(picture.thumbnail()));

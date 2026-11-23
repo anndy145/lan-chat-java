@@ -1,6 +1,7 @@
 package server;
 
 import common.ChatProtocol;
+import common.ImageWire;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -306,14 +307,22 @@ public class Server implements AutoCloseable {
         group.members.forEach(member -> member.send(announcement));
     }
 
-    synchronized ImageUpload.Route imageRoute(ClientSession sender, boolean groupChat, String target) {
+    synchronized ImageUpload.Route imageRoute(ClientSession sender, ImageWire.Destination destination, String target) {
         if (!clients.contains(sender) || !sender.isActive() || sender.isClosing()) return null;
-        if (groupChat) {
+        if (destination == ImageWire.Destination.GROUP) {
             ChatGroup group = groups.get(target);
             if (group == null || !group.members.contains(sender)) return null;
             return new ImageUpload.Route(group.name, group.members.stream()
                     .filter(member -> member != sender && !member.isClosing())
                     .map(member -> new ImageUpload.Recipient(member, member.getUserId(), target, group.name, member.groupDepartureVersion))
+                    .toList());
+        }
+        if (destination == ImageWire.Destination.LOBBY) {
+            if (!ImageWire.LOBBY_TARGET.equals(target)) return null;
+            return new ImageUpload.Route(ImageWire.LOBBY_TITLE, clients.stream()
+                    .filter(peer -> peer != sender && peer.isActive() && !peer.isClosing())
+                    .map(peer -> new ImageUpload.Recipient(peer, peer.getUserId(), target, ImageWire.LOBBY_TITLE,
+                            peer.imageRouteVersion(destination)))
                     .toList());
         }
         return clients.stream().filter(peer -> peer != sender && peer.isActive()
@@ -323,18 +332,19 @@ public class Server implements AutoCloseable {
                 .orElse(null);
     }
 
-    synchronized int queueImage(ClientSession sender, String senderId, long senderVersion, boolean groupChat, String target,
+    synchronized int queueImage(ClientSession sender, String senderId, long senderVersion, ImageWire.Destination destination, String target,
                                 ImageUpload.Recipient recipient, byte[] frame) {
         ClientSession peer = recipient.session();
         if (!clients.contains(sender) || !sender.isActive() || sender.isClosing()
                 || !senderId.equals(sender.getUserId()) || !clients.contains(peer) || !peer.isActive()
                 || peer.isClosing() || !recipient.id().equals(peer.getUserId())) return -1;
-        if (groupChat) {
+        if (destination == ImageWire.Destination.GROUP) {
             ChatGroup group = groups.get(target);
-            if (group == null || !group.members.contains(sender) || !group.members.contains(peer)
-                    || senderVersion != sender.groupDepartureVersion
-                    || recipient.groupVersion() != peer.groupDepartureVersion) return -1;
+            if (group == null || !group.members.contains(sender) || !group.members.contains(peer)) return -1;
         }
+        if (destination != ImageWire.Destination.PRIVATE
+                && (senderVersion != sender.imageRouteVersion(destination)
+                    || recipient.routeVersion() != peer.imageRouteVersion(destination))) return -1;
         return peer.offerImage(frame) ? 1 : 0;
     }
 

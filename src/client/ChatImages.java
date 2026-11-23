@@ -13,17 +13,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 final class ChatImages {
-    record Picture(boolean group, String conversation, String title, String sender,
+    record Picture(ImageWire.Destination destination, String conversation, String title, String sender,
                    String filename, byte[] bytes, BufferedImage thumbnail) implements ChatModel.Entry {}
     private record Incoming(String[] header, ImageChunks body) {}
     private final Map<String, Incoming> incoming = new HashMap<>();
 
-    static void send(PrintWriter output, Path path, String id, String sender, boolean group, String target)
+    static void send(PrintWriter output, Path path, String id, String sender, ImageWire.Destination destination, String target)
             throws IOException {
         byte[] bytes = ImageFiles.read(path);
         String name = path.getFileName().toString();
         if (!ImageWire.validName(name)) throw new IOException("Invalid image filename.");
-        output.println(ImageWire.BEGIN + id + ":" + sender + ":" + (group ? "g" : "p")
+        output.println(ImageWire.BEGIN + id + ":" + sender + ":" + destination.code()
                 + ":" + target + ":" + ChatProtocol.encode(name) + ":" + bytes.length);
         int sequence = 0;
         for (int offset = 0; offset < bytes.length; offset += ImageChunks.CHUNK_BYTES) {
@@ -61,7 +61,7 @@ final class ChatImages {
                     byte[] bytes = transfer.body().finishBytes();
                     String filename = ChatProtocol.decode(header[5]);
                     if (!ImageWire.validName(filename)) throw new IOException("Invalid image filename.");
-                    return new Picture(header[1].equals("g"), header[2], ChatProtocol.decode(header[3]),
+                    return new Picture(ImageWire.Destination.fromCode(header[1]), header[2], ChatProtocol.decode(header[3]),
                             ChatProtocol.decode(header[4]), filename, bytes, scaled(ImageFiles.decode(bytes), 240));
                 }
             } else {

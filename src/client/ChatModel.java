@@ -15,15 +15,20 @@ final class ChatModel {
     interface Entry {}
     record Text(String value) implements Entry {}
     final Map<String, List<Entry>> privateHistory = new LinkedHashMap<>();
+    final List<Entry> lobbyImages = new ArrayList<>();
     final Map<String, List<Entry>> groupHistory = new LinkedHashMap<>();
 
     boolean addPicture(ChatImages.Picture picture) {
-        long retained = java.util.stream.Stream.concat(privateHistory.values().stream(), groupHistory.values().stream())
+        long retained = java.util.stream.Stream.concat(java.util.stream.Stream.of(lobbyImages),
+                java.util.stream.Stream.concat(privateHistory.values().stream(), groupHistory.values().stream()))
                 .flatMap(List::stream).filter(ChatImages.Picture.class::isInstance)
                 .map(ChatImages.Picture.class::cast).mapToLong(item -> item.bytes().length + 240L * 240 * 4).sum();
         if (retained + picture.bytes().length + 240L * 240 * 4 > 32L * 1024 * 1024) return false;
-        var history = picture.group() ? groupHistory : privateHistory;
-        history.computeIfAbsent(picture.conversation(), key -> new ArrayList<>()).add(picture);
+        switch (picture.destination()) {
+            case LOBBY -> lobbyImages.add(picture);
+            case GROUP -> groupHistory.computeIfAbsent(picture.conversation(), key -> new ArrayList<>()).add(picture);
+            case PRIVATE -> privateHistory.computeIfAbsent(picture.conversation(), key -> new ArrayList<>()).add(picture);
+        }
         return true;
     }
 

@@ -187,7 +187,7 @@ final class ChatController {
                             if (picture != null) SwingUtilities.invokeLater(() -> {
                                 if (model.socket != newSocket || model.observing) return;
                                 if (model.addPicture(picture)) view.showPicture(picture);
-                                else appendMessage("Image history is full. Reconnect to clear it.");
+                                else appendMessage("Image history is full. Restart the client to clear it.");
                             });
                         } catch (IOException exception) {
                             SwingUtilities.invokeLater(() -> {
@@ -200,6 +200,8 @@ final class ChatController {
                         if (model.socket == newSocket) {
                             if (received.equals(ImageWire.READY)) {
                                 view.enableImages(true);
+                            } else if (received.equals(ImageWire.READY_LOBBY)) {
+                                view.enableLobbyImages(true);
                             } else if (received.startsWith(ImageWire.RESULT)) {
                                 showImageResult(received);
                             } else if (received.startsWith(ImageWire.NOTICE)) {
@@ -283,7 +285,10 @@ final class ChatController {
 
     void sendPicture() {
         String group = view.selectedGroupId();
-        String target = group == null ? view.selectedPrivateId() : group;
+        boolean lobby = view.isLobbySelected();
+        var destination = lobby ? ImageWire.Destination.LOBBY
+                : group != null ? ImageWire.Destination.GROUP : ImageWire.Destination.PRIVATE;
+        String target = lobby ? ImageWire.LOBBY_TARGET : group == null ? view.selectedPrivateId() : group;
         var writer = model.output;
         String sender = model.activeId;
         if (target == null || writer == null || sender == null || imageUploadId != null) return;
@@ -298,7 +303,7 @@ final class ChatController {
         timeout.start();
         Thread.ofVirtual().start(() -> {
             try {
-                ChatImages.send(writer, file, id, sender, group != null, target);
+                ChatImages.send(writer, file, id, sender, destination, target);
             } catch (IOException exception) {
                 SwingUtilities.invokeLater(() -> finishImageUpload(id, exception.getMessage()));
             }
@@ -314,7 +319,7 @@ final class ChatController {
         if (!id.equals(imageUploadId)) return;
         imageUploadId = null;
         view.setImageBusy(false);
-        appendMessage(message);
+        if (!message.startsWith("Image queued for ")) appendMessage(message);
     }
 
     void sendMessage() {

@@ -44,7 +44,7 @@ java -cp "out;resources" client.ChatWindow
 - **私訊**：雙擊左側名單的使用者，或右鍵選擇 **Open private chat**。
 - **群組**：按住 **Ctrl** 可選取多位使用者，再按分頁列的 **+** 建立群組。選取群組分頁後，可使用 **Add members**、**Group members** 和 **Leave group**。關閉分頁只會隱藏分頁，新成員只會看到加入後的訊息。
 - **線上名單**：在 **Connection settings** 按 **Observe only** 可只查看名單。要加入時按 **Join chat**。在聊天中按上方的 **Leave** 會返回觀察模式，再按設定內的 **Disconnect** 可中斷連線。
-- **圖片**：在私訊或群組分頁按輸入框左側的圖片圖示，選擇 PNG、JPG 或 JPEG。每張限 5 MiB、2,000 萬像素。點擊縮圖可預覽或另存，命令列只顯示收圖提示。
+- **圖片**：在 Lobby、私訊或群組分頁按輸入框左側的圖片圖示，選擇 PNG、JPG 或 JPEG。每張限 5 MiB、2,000 萬像素。點擊縮圖可預覽或另存，命令列只顯示收圖提示。Lobby 圖片需要更新 Server 和 GUI Client。
 - **主題**：點右上角的月亮或太陽圖示切換亮色與深色模式。
 
 ## 命令列介面

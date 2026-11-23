@@ -93,6 +93,18 @@ public class ImageTransferRegression {
                 alice.expectImage("p", bob.id, png);
                 alice.until(ImageWire.RESULT);
 
+                alice.output.println(ImageWire.ENABLE_LOBBY);
+                alice.until(ImageWire.READY_LOBBY);
+                bob.output.println(ImageWire.ENABLE_LOBBY);
+                bob.until(ImageWire.READY_LOBBY);
+                alice.finish(alice.begin("l", ImageWire.LOBBY_TARGET, png.length), png);
+                bob.expectImage("l", ImageWire.LOBBY_TARGET, png);
+                alice.expectImage("l", ImageWire.LOBBY_TARGET, png);
+                String lobbyNotice = ChatProtocol.decode(cli.until(ImageWire.NOTICE).substring(ImageWire.NOTICE.length()));
+                if (!lobbyNotice.contains("Alice in Lobby")) throw new AssertionError(lobbyNotice);
+                alice.until(ImageWire.RESULT);
+
+
                 alice.output.println(ChatProtocol.GROUP_CREATE + ChatProtocol.encode("Team") + ":" + bob.id + "," + cli.id);
                 String group = alice.until(ChatProtocol.GROUP_MESSAGE).split(":", 3)[1];
                 String transfer = alice.begin("g", group, png.length);

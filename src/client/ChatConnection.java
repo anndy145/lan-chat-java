@@ -24,6 +24,7 @@ final class ChatConnection {
         PrintWriter output = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         output.println(ChatProtocol.OBSERVE);
         output.println(common.ImageWire.ENABLE);
+        output.println(common.ImageWire.ENABLE_LOBBY);
         if (!observeOnly) output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
         connected.accept(output);
         String line;

@@ -11,6 +11,31 @@ public final class ImageWire {
     public static final String NOTICE = "@image-notice:";
     public static final String RESULT = "@image-result:";
 
+    // Older servers ignore this BEGIN payload because it is not a transfer UUID.
+    public static final String ENABLE_LOBBY = BEGIN + "lobby-capability";
+    public static final String READY_LOBBY = READY + ":lobby";
+    public static final String LOBBY_TARGET = "lobby";
+    public static final String LOBBY_TITLE = "Lobby";
+
+    public enum Destination {
+        PRIVATE("p"), GROUP("g"), LOBBY("l");
+
+        private final String code;
+
+        Destination(String code) { this.code = code; }
+
+        public String code() { return code; }
+
+        public static Destination fromCode(String code) {
+            return switch (code) {
+                case "p" -> PRIVATE;
+                case "g" -> GROUP;
+                case "l" -> LOBBY;
+                default -> throw new IllegalArgumentException("Unknown image destination.");
+            };
+        }
+    }
+
     private ImageWire() {}
 
     public static boolean validName(String name) {

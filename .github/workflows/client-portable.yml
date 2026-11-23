@@ -75,16 +75,19 @@ jobs:
 
       - name: Create portable application
         shell: pwsh
-        run: >-
-          jpackage --type app-image --name LanChatClient
-          --input out/input --main-jar client.jar --main-class client.ChatWindow
-          --dest out/portable --add-modules java.desktop
+        run: |
+          @"
+          main-class=server.Server
+          win-console=true
+          "@ | Set-Content -Encoding ascii out/input/server-launcher.properties
+          jpackage --type app-image --name LanChatClient --input out/input --main-jar client.jar --main-class client.ChatWindow --add-launcher LanChatServer=out/input/server-launcher.properties --dest out/portable --add-modules java.desktop
 
       - name: Verify package files
         shell: pwsh
         run: |
           $requiredFiles = @(
             'out/portable/LanChatClient/LanChatClient.exe',
+            'out/portable/LanChatClient/LanChatServer.exe',
             'out/portable/LanChatClient/app/client.jar',
             'out/portable/LanChatClient/runtime/bin/server/jvm.dll'
           )

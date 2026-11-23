@@ -86,9 +86,11 @@ public class ChatWindow extends JFrame {
         }
     };
     private final JButton imageButton = new JButton();
+    private final JButton fileButton = new JButton();
+    private final JLabel transferLabel = new JLabel();
     private boolean imagesEnabled;
     private boolean lobbyImagesEnabled;
-    private boolean imageBusy;
+    private boolean filesEnabled;
     final JButton sendButton = new JButton("Send");
     final JButton leaveButton = new JButton("Leave");
     private final JMenuItem privateMenuItem = new JMenuItem("Open private chat");
@@ -174,6 +176,8 @@ public class ChatWindow extends JFrame {
         hostButton.addActionListener(event -> controller.hostAction());
         sendButton.addActionListener(event -> controller.sendMessage());
         imageButton.addActionListener(event -> controller.sendPicture());
+        fileButton.addActionListener(event -> controller.sendFile());
+        inputField.setTransferHandler(new AttachmentTransferHandler(inputField.getTransferHandler()));
         chats.addChangeListener(event -> {
             clearUnread(chats.getSelectedComponent());
             refreshImageButton();
@@ -322,6 +326,7 @@ public class ChatWindow extends JFrame {
         chats.addTab("Lobby", createContentScroll(chatArea));
         describeButton(createGroupButton, "Create group");
         describeButton(imageButton, "Send image");
+        describeButton(fileButton, "Send file (up to 20 MiB)");
         inputField.getAccessibleContext().setAccessibleName("Type a message");
 
         // The tab UI reserves a slot for the create button, including when tabs scroll.
@@ -340,11 +345,14 @@ public class ChatWindow extends JFrame {
         groupActions.setVisible(false);
 
         JPanel composer = new JPanel(new BorderLayout(8, 0));
-        composer.add(imageButton, BorderLayout.WEST);
+        JPanel attachments = new JPanel(new java.awt.GridLayout(1, 2, 6, 0));
+        attachments.add(imageButton);
+        attachments.add(fileButton);
+        composer.add(attachments, BorderLayout.WEST);
         inputField.setLineWrap(true);
         inputField.setWrapStyleWord(true);
         inputField.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
-        inputField.setToolTipText("Enter to send; Shift+Enter for a new line");
+        inputField.setToolTipText("Enter to send; Shift+Enter for a new line; paste or drop files to send them");
         JScrollPane inputScroll = new JScrollPane(inputField);
         inputScroll.setBorder(new ControlBorder(new Insets(1, 1, 1, 1)));
         composer.add(inputScroll, BorderLayout.CENTER);
@@ -352,7 +360,12 @@ public class ChatWindow extends JFrame {
         JPanel conversation = new JPanel(new BorderLayout(0, 10));
         conversation.add(groupActions, BorderLayout.NORTH);
         conversation.add(tabRegion, BorderLayout.CENTER);
-        conversation.add(composer, BorderLayout.SOUTH);
+        JPanel bottom = new JPanel(new BorderLayout(0, 4));
+        transferLabel.setFont(transferLabel.getFont().deriveFont(11f));
+        transferLabel.setVisible(false);
+        bottom.add(transferLabel, BorderLayout.NORTH);
+        bottom.add(composer, BorderLayout.CENTER);
+        conversation.add(bottom, BorderLayout.SOUTH);
         return conversation;
     }
 
@@ -458,6 +471,8 @@ public class ChatWindow extends JFrame {
         });
         themeButton.setIcon(new WindowIcon(false));
         imageButton.setIcon(new WindowIcon(true));
+        fileButton.setIcon(new DocumentIcon());
+        transferLabel.setForeground(mutedColor());
         describeButton(themeButton, darkMode ? "Switch to light mode" : "Switch to dark mode");
         rosterPanel.setBackground(darkMode ? new Color(0x181B22) : new Color(0xF5F7FA));
         usersList.setBackground(rosterPanel.getBackground());
@@ -473,11 +488,11 @@ public class ChatWindow extends JFrame {
     private void applyControlStyle() {
         styleMainButton(connectButton, true);
         styleMainButton(sendButton, true);
-        for (JButton button : List.of(viewUsersButton, hostButton, themeButton, imageButton, leaveButton,
+        for (JButton button : List.of(viewUsersButton, hostButton, themeButton, imageButton, fileButton, leaveButton,
                 settingsButton, createGroupButton, addMembersButton, groupMembersButton, leaveGroupButton)) {
             styleMainButton(button, false);
         }
-        for (JButton button : List.of(themeButton, imageButton))
+        for (JButton button : List.of(themeButton, imageButton, fileButton))
             button.setPreferredSize(new Dimension(BUTTON_HEIGHT, BUTTON_HEIGHT));
         createGroupButton.setPreferredSize(new Dimension(TAB_ACTION_SIZE, TAB_ACTION_SIZE));
         // 分頁關閉按鈕維持原本的點擊範圍。
@@ -772,6 +787,8 @@ public class ChatWindow extends JFrame {
     private void configureTranscript(JTextPane pane) {
         pane.setEditable(false);
         pane.setMargin(new Insets(8, 10, 8, 10));
+        // 將檔案拖曳到聊天內容區也能傳送；保留原本的文字選取與複製功能。
+        pane.setTransferHandler(new AttachmentTransferHandler(pane.getTransferHandler()));
 
     }
 
@@ -856,14 +873,38 @@ public class ChatWindow extends JFrame {
         refreshImageButton();
     }
 
-    void setImageBusy(boolean busy) {
-        imageBusy = busy;
+    void enableFiles(boolean enabled) {
+        filesEnabled = enabled;
         refreshImageButton();
     }
 
+    /** 顯示目前的上傳進度；傳入 null 時隱藏。 */
+    void setTransferStatus(String status) {
+        transferLabel.setText(status == null ? "" : status);
+        transferLabel.setVisible(status != null);
+    }
+
+    private boolean chatSelected() {
+        return isLobbySelected() || selectedPrivateId() != null || selectedGroupId() != null;
+    }
+
+    boolean imagesAllowedHere() {
+        return imagesEnabled && sendButton.isEnabled() && chatSelected()
+                && (!isLobbySelected() || lobbyImagesEnabled);
+    }
+
+    boolean filesAllowed() {
+        return filesEnabled && sendButton.isEnabled() && chatSelected();
+    }
+
+    String selectedChatTitle() {
+        String name = tabNames.get(chats.getSelectedComponent());
+        return name != null ? name : "Lobby";
+    }
+
     private void refreshImageButton() {
-        imageButton.setEnabled(imagesEnabled && !imageBusy && sendButton.isEnabled()
-                && (isLobbySelected() ? lobbyImagesEnabled : selectedPrivateId() != null || selectedGroupId() != null));
+        imageButton.setEnabled(imagesAllowedHere());
+        fileButton.setEnabled(filesAllowed());
     }
 
     Path choosePicture() {
@@ -874,12 +915,52 @@ public class ChatWindow extends JFrame {
                 : null;
     }
 
-    void showPicture(ChatImages.Picture picture) {
-        JScrollPane scroll = switch (picture.destination()) {
+    List<Path> chooseFiles() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setMultiSelectionEnabled(true);
+        chooser.setDialogTitle("Send files (up to 20 MiB each)");
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return List.of();
+        return java.util.Arrays.stream(chooser.getSelectedFiles()).map(java.io.File::toPath).toList();
+    }
+
+    boolean confirmFiles(List<Path> files, String title) {
+        StringBuilder text = new StringBuilder("Send " + (files.size() == 1 ? "this file" : files.size() + " files")
+                + " to " + title + "?\n");
+        files.stream().limit(5).forEach(path -> text.append("\n  ").append(path.getFileName()));
+        if (files.size() > 5) text.append("\n  ... and ").append(files.size() - 5).append(" more");
+        return JOptionPane.showConfirmDialog(this, text.toString(), "Send files",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE) == JOptionPane.OK_OPTION;
+    }
+
+    // 貼上的截圖可能含有敏感內容，送出前先顯示預覽讓使用者確認。
+    boolean confirmPastedImage(java.awt.Image image, String title) {
+        ImageIcon original = new ImageIcon(image);
+        int width = original.getIconWidth();
+        int height = original.getIconHeight();
+        if (width <= 0 || height <= 0) {
+            showMessage("The clipboard image could not be read.");
+            return false;
+        }
+        double scale = Math.min(1.0, 320.0 / Math.max(width, height));
+        ImageIcon preview = new ImageIcon(image.getScaledInstance(Math.max(1, (int) (width * scale)),
+                Math.max(1, (int) (height * scale)), java.awt.Image.SCALE_SMOOTH));
+        JLabel label = new JLabel("Send this image to " + title + "?", preview, JLabel.CENTER);
+        label.setVerticalTextPosition(JLabel.BOTTOM);
+        label.setHorizontalTextPosition(JLabel.CENTER);
+        return JOptionPane.showConfirmDialog(this, label, "Send pasted image",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION;
+    }
+
+    private JScrollPane conversationScroll(common.ImageWire.Destination destination, String conversation, String title) {
+        return switch (destination) {
             case LOBBY -> (JScrollPane) chats.getComponentAt(0);
-            case GROUP -> groupChat(picture.conversation(), picture.title());
-            case PRIVATE -> privateChat(picture.conversation(), picture.title()).pane;
+            case GROUP -> groupChat(conversation, title);
+            case PRIVATE -> privateChat(conversation, title).pane;
         };
+    }
+
+    void showPicture(ChatImages.Picture picture) {
+        JScrollPane scroll = conversationScroll(picture.destination(), picture.conversation(), picture.title());
         JTextPane pane = (JTextPane) scroll.getViewport().getView();
         appendText(pane, picture.sender() + ": " + picture.filename(), false);
         JButton thumbnail = new JButton(new ImageIcon(picture.thumbnail()));
@@ -888,6 +969,22 @@ public class ChatWindow extends JFrame {
         thumbnail.addActionListener(event -> previewPicture(picture));
         pane.setCaretPosition(pane.getDocument().getLength());
         pane.insertComponent(thumbnail);
+        appendText(pane, "");
+        markUnread(scroll);
+    }
+
+    void showAttachment(ChatFiles.Attachment file) {
+        JScrollPane scroll = conversationScroll(file.destination(), file.conversation(), file.title());
+        JTextPane pane = (JTextPane) scroll.getViewport().getView();
+        appendText(pane, file.sender() + " shared a file", false);
+        JButton button = new JButton(file.filename() + "   " + ChatFiles.size(file.bytes().length) + "   Save...",
+                new DocumentIcon());
+        button.setIconTextGap(8);
+        button.setToolTipText("Save " + file.filename());
+        button.getAccessibleContext().setAccessibleName("Save file " + file.filename());
+        button.addActionListener(event -> saveBytes(file.filename(), file.bytes(), "file"));
+        pane.setCaretPosition(pane.getDocument().getLength());
+        pane.insertComponent(button);
         appendText(pane, "");
         markUnread(scroll);
     }
@@ -907,7 +1004,7 @@ public class ChatWindow extends JFrame {
                     int choice = JOptionPane.showOptionDialog(this, scroll, picture.filename(),
                             JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, choices, choices[1]);
                     if (choice == 0)
-                        savePicture(picture);
+                        saveBytes(picture.filename(), picture.bytes(), "image");
                 });
             } catch (IOException exception) {
                 SwingUtilities.invokeLater(() -> showMessage(exception.getMessage()));
@@ -915,20 +1012,112 @@ public class ChatWindow extends JFrame {
         });
     }
 
-    private void savePicture(ChatImages.Picture picture) {
+    private void saveBytes(String filename, byte[] bytes, String kind) {
         JFileChooser chooser = new JFileChooser();
-        chooser.setSelectedFile(new java.io.File(picture.filename()));
+        chooser.setSelectedFile(new java.io.File(filename));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
             return;
         Path destination = chooser.getSelectedFile().toPath();
+        boolean replace = Files.exists(destination);
+        if (replace && JOptionPane.showConfirmDialog(this, destination.getFileName() + " already exists. Replace it?",
+                "Confirm save", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION)
+            return;
         Thread.ofVirtual().start(() -> {
             try {
-                Files.write(destination, picture.bytes(), java.nio.file.StandardOpenOption.CREATE_NEW,
-                        java.nio.file.StandardOpenOption.WRITE);
+                if (replace) {
+                    Files.write(destination, bytes, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+                            java.nio.file.StandardOpenOption.WRITE);
+                } else {
+                    Files.write(destination, bytes, java.nio.file.StandardOpenOption.CREATE_NEW,
+                            java.nio.file.StandardOpenOption.WRITE);
+                }
             } catch (IOException exception) {
-                SwingUtilities.invokeLater(() -> showMessage("Could not save image: " + exception.getMessage()));
+                SwingUtilities.invokeLater(() -> showMessage("Could not save " + kind + ": " + exception.getMessage()));
             }
         });
+    }
+
+    /** 接受拖曳或貼上的檔案與剪貼簿圖片，其他資料交給原本的文字處理器。 */
+    private final class AttachmentTransferHandler extends javax.swing.TransferHandler {
+        private final javax.swing.TransferHandler delegate;
+
+        AttachmentTransferHandler(javax.swing.TransferHandler delegate) {
+            this.delegate = delegate;
+        }
+
+        private boolean pastedImage(TransferSupport support) {
+            // 試算表等程式會同時提供文字與圖片，此時保留文字貼上。
+            return support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.imageFlavor)
+                    && !support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.stringFlavor);
+        }
+
+        @Override
+        public boolean canImport(TransferSupport support) {
+            if (support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor))
+                return imagesAllowedHere() || filesAllowed();
+            if (pastedImage(support)) return imagesAllowedHere();
+            return delegate != null && delegate.canImport(support);
+        }
+
+        @Override
+        public boolean importData(TransferSupport support) {
+            try {
+                var transferable = support.getTransferable();
+                if (support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor)) {
+                    if (!imagesAllowedHere() && !filesAllowed()) return false;
+                    List<?> files = (List<?>) transferable.getTransferData(java.awt.datatransfer.DataFlavor.javaFileListFlavor);
+                    List<Path> paths = files.stream().filter(java.io.File.class::isInstance)
+                            .map(file -> ((java.io.File) file).toPath()).toList();
+                    // 延後顯示確認視窗，讓拖放操作先完成。
+                    SwingUtilities.invokeLater(() -> controller.sendDroppedFiles(paths));
+                    return true;
+                }
+                if (pastedImage(support)) {
+                    if (!imagesAllowedHere()) return false;
+                    var image = (java.awt.Image) transferable.getTransferData(java.awt.datatransfer.DataFlavor.imageFlavor);
+                    SwingUtilities.invokeLater(() -> controller.sendPastedImage(image));
+                    return true;
+                }
+            } catch (java.awt.datatransfer.UnsupportedFlavorException | IOException | ClassCastException exception) {
+                showMessage("Could not read the pasted or dropped content.");
+                return false;
+            }
+            return delegate != null && delegate.importData(support);
+        }
+
+        @Override
+        public int getSourceActions(JComponent component) {
+            return delegate == null ? NONE : delegate.getSourceActions(component);
+        }
+
+        @Override
+        public void exportAsDrag(JComponent component, java.awt.event.InputEvent event, int action) {
+            if (delegate != null) delegate.exportAsDrag(component, event, action);
+        }
+
+        @Override
+        public void exportToClipboard(JComponent component, java.awt.datatransfer.Clipboard clipboard, int action) {
+            if (delegate != null) delegate.exportToClipboard(component, clipboard, action);
+        }
+    }
+
+    private final class DocumentIcon implements Icon {
+        @Override public int getIconWidth() { return 18; }
+        @Override public int getIconHeight() { return 18; }
+
+        @Override
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D drawing = (Graphics2D) graphics.create();
+            drawing.translate(x, y);
+            drawing.setColor(component.isEnabled() ? component.getForeground() : mutedColor());
+            drawing.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            drawing.setStroke(new java.awt.BasicStroke(1.5f));
+            drawing.drawPolygon(new int[]{3, 11, 15, 15, 3}, new int[]{1, 1, 5, 17, 17}, 5);
+            drawing.drawPolyline(new int[]{11, 11, 15}, new int[]{1, 5, 5}, 3);
+            drawing.drawLine(6, 9, 12, 9);
+            drawing.drawLine(6, 12, 12, 12);
+            drawing.dispose();
+        }
     }
 
     void showOnlineUsers(List<OnlineUser> users) {

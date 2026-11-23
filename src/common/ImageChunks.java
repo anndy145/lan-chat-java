@@ -4,7 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Base64;
 
-/** 圖片區塊的大小與順序驗證。此類別不負責網路傳輸或授權。 */
+/** 圖片與檔案區塊的大小與順序驗證。此類別不負責網路傳輸或授權。 */
 public final class ImageChunks {
     public static final int CHUNK_BYTES = 8 * 1024;
     private final int expectedBytes;
@@ -12,8 +12,12 @@ public final class ImageChunks {
     private int nextSequence;
 
     public ImageChunks(int expectedBytes) {
-        if (expectedBytes <= 0 || expectedBytes > ImageFiles.MAX_BYTES) {
-            throw new IllegalArgumentException("Invalid image size");
+        this(expectedBytes, ImageFiles.MAX_BYTES);
+    }
+
+    public ImageChunks(int expectedBytes, int maxBytes) {
+        if (expectedBytes <= 0 || expectedBytes > maxBytes) {
+            throw new IllegalArgumentException("Invalid size");
         }
         this.expectedBytes = expectedBytes;
         this.data = new ByteArrayOutputStream(Math.min(expectedBytes, CHUNK_BYTES));
@@ -49,7 +53,7 @@ public final class ImageChunks {
     }
 
     public byte[] finishBytes() throws IOException {
-        if (data.size() != expectedBytes) throw new IOException("Incomplete image");
+        if (data.size() != expectedBytes) throw new IOException("Incomplete transfer");
         return data.toByteArray();
     }
 }

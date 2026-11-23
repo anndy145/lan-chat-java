@@ -17,6 +17,7 @@ class ClientSession implements Runnable {
     private final Server server;
     volatile boolean receivesImages;
     volatile boolean receivesLobbyImages;
+    volatile boolean receivesFiles;
     long activeVersion;
     long groupDepartureVersion;
     boolean isClosing() { return closing.get(); }
@@ -41,7 +42,8 @@ class ClientSession implements Runnable {
     public void run() {
         boolean requestedQuit = false;
         boolean rejected = false;
-        ImageUpload images = new ImageUpload(this, server);
+        TransferUpload images = new TransferUpload(this, server, TransferUpload.Kind.IMAGE);
+        TransferUpload files = new TransferUpload(this, server, TransferUpload.Kind.FILE);
         try {
             startWriter();
             BoundedLineReader input = new BoundedLineReader(socket);
@@ -75,17 +77,18 @@ class ClientSession implements Runnable {
 
             String line;
             while (true) {
-                long imageDeadline = images.deadline();
-                if (imageDeadline == 0 && socket.getSoTimeout() != 0) socket.setSoTimeout(0);
-                line = input.readLine(imageDeadline);
+                long uploadDeadline = earliest(images.deadline(), files.deadline());
+                if (uploadDeadline == 0 && socket.getSoTimeout() != 0) socket.setSoTimeout(0);
+                line = input.readLine(uploadDeadline);
                 if (line == null) break;
                 if ("/quit".equalsIgnoreCase(line.trim())) {
                     requestedQuit = true;
                     break;
                 }
-                if (images.handle(line)) continue;
+                if (images.handle(line) || files.handle(line)) continue;
                 if (ChatProtocol.LEAVE.equals(line)) {
                     images.close();
+            files.close();
                     server.setActive(this, false);
                 } else if ("@join".equals(line)) {
                     server.join(this, name);
@@ -160,6 +163,7 @@ class ClientSession implements Runnable {
             // 關閉連線時由 Server 統一記錄狀態，避免重複訊息。
         } finally {
             images.close();
+            files.close();
             if (rejected) drainRejection();
             closeSocket();
             if (writerThread != null) writerThread.interrupt();
@@ -271,6 +275,12 @@ class ClientSession implements Runnable {
     void setActive(boolean active) {
         if (this.active != active) activeVersion++;
         this.active = active;
+    }
+
+    private static long earliest(long first, long second) {
+        if (first == 0) return second;
+        if (second == 0) return first;
+        return first - second <= 0 ? first : second;
     }
 
     private static String decodeMessage(String encoded) {

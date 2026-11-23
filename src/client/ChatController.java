@@ -1,6 +1,11 @@
 package client;
 
 import common.ChatProtocol;
+import common.FileWire;
+import common.ImageFiles;
+import common.TransferWire;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import common.ImageWire;
 import client.ChatModel.OnlineUser;
 import java.io.IOException;
@@ -15,7 +20,9 @@ import server.Server;
 
 /** 處理使用者操作與連線事件。所有狀態與介面更新都在 Swing 執行緒執行。 */
 final class ChatController {
-    private String imageUploadId;
+    private final java.util.ArrayDeque<Outgoing> outgoing = new java.util.ArrayDeque<>();
+    private String uploadId;
+    private javax.swing.Timer uploadTimer;
     private final ChatWindow view;
     private final ChatModel model;
 
@@ -164,6 +171,7 @@ final class ChatController {
         Thread connectionThread = new Thread(() -> {
             Socket newSocket = new Socket();
             ChatImages images = new ChatImages();
+            ChatFiles files = new ChatFiles();
             try {
                 ChatConnection.receive(newSocket, host, port, observeOnly, name, writer -> {
                 // Swing 元件只能在介面執行緒更新。
@@ -181,6 +189,21 @@ final class ChatController {
                     appendMessage(observeOnly ? "Connected. You can view online users." : "Joining chat...");
                 });
                 }, received -> {
+                    if (ChatFiles.isData(received)) {
+                        try {
+                            ChatFiles.Attachment attachment = files.receive(received);
+                            if (attachment != null) SwingUtilities.invokeLater(() -> {
+                                if (model.socket != newSocket || model.observing) return;
+                                if (model.addAttachment(attachment)) view.showAttachment(attachment);
+                                else appendMessage("File history is full. Restart the client to receive more files.");
+                            });
+                        } catch (IOException exception) {
+                            SwingUtilities.invokeLater(() -> {
+                                if (model.socket == newSocket) appendMessage(exception.getMessage());
+                            });
+                        }
+                        return;
+                    }
                     if (ChatImages.isData(received)) {
                         try {
                             ChatImages.Picture picture = images.receive(received);
@@ -202,8 +225,10 @@ final class ChatController {
                                 view.enableImages(true);
                             } else if (received.equals(ImageWire.READY_LOBBY)) {
                                 view.enableLobbyImages(true);
-                            } else if (received.startsWith(ImageWire.RESULT)) {
-                                showImageResult(received);
+                            } else if (received.equals(FileWire.READY)) {
+                                view.enableFiles(true);
+                            } else if (received.startsWith(ImageWire.RESULT) || received.startsWith(FileWire.RESULT)) {
+                                showTransferResult(received);
                             } else if (received.startsWith(ImageWire.NOTICE)) {
                                 appendMessage(ChatProtocol.decode(received.substring(ImageWire.NOTICE.length())));
                             } else if (received.startsWith(ChatProtocol.JOINED)) {
@@ -283,43 +308,172 @@ final class ChatController {
         connectionThread.start();
     }
 
-    void sendPicture() {
+    // 傳送佇列：圖片按鈕、檔案按鈕、拖曳與貼上都依序上傳，目標在加入佇列時決定。
+    private enum Mode { IMAGE, FILE, AUTO }
+
+    private record Target(ImageWire.Destination destination, String id, String title, boolean images, boolean files) {}
+
+    private record Outgoing(Path path, java.awt.Image pasted, String name, Mode mode, Target target) {}
+
+    private record Payload(TransferWire wire, byte[] bytes, String name) {}
+
+    private static final int MAX_QUEUED_UPLOADS = 20;
+
+    private Target currentTarget() {
         String group = view.selectedGroupId();
         boolean lobby = view.isLobbySelected();
         var destination = lobby ? ImageWire.Destination.LOBBY
                 : group != null ? ImageWire.Destination.GROUP : ImageWire.Destination.PRIVATE;
         String target = lobby ? ImageWire.LOBBY_TARGET : group == null ? view.selectedPrivateId() : group;
+        if (target == null || model.output == null || model.activeId == null || model.observing) return null;
+        return new Target(destination, target, view.selectedChatTitle(), view.imagesAllowedHere(), view.filesAllowed());
+    }
+
+    void sendPicture() {
+        Target target = currentTarget();
+        if (target == null || !target.images()) return;
+        Path file = view.choosePicture();
+        if (file != null) enqueue(List.of(new Outgoing(file, null, file.getFileName().toString(), Mode.IMAGE, target)));
+    }
+
+    void sendFile() {
+        Target target = currentTarget();
+        if (target == null || !target.files()) return;
+        List<Path> files = view.chooseFiles();
+        enqueue(files.stream().map(path -> new Outgoing(path, null, path.getFileName().toString(), Mode.FILE, target))
+                .toList());
+    }
+
+    /** 拖曳或貼上的檔案：PNG/JPEG 以圖片顯示，其他檔案以附件傳送。 */
+    void sendDroppedFiles(List<Path> paths) {
+        Target target = currentTarget();
+        if (target == null || paths.isEmpty()) return;
+        List<Path> regular = paths.stream().filter(Files::isRegularFile).toList();
+        if (regular.size() != paths.size()) appendMessage("Folders cannot be sent. Select files instead.");
+        if (regular.isEmpty()) return;
+        if (!target.files() && regular.stream().anyMatch(path -> !ChatImages.hasImageName(path.getFileName().toString()))) {
+            view.showMessage("This server only supports images. Update the server to send other files.");
+            return;
+        }
+        if (!view.confirmFiles(regular, target.title())) return;
+        if (!target.equals(currentTarget())) return;
+        enqueue(regular.stream().map(path -> new Outgoing(path, null, path.getFileName().toString(), Mode.AUTO, target))
+                .toList());
+    }
+
+    void sendPastedImage(java.awt.Image image) {
+        Target target = currentTarget();
+        if (target == null || !target.images()) return;
+        if (!view.confirmPastedImage(image, target.title())) return;
+        if (!target.equals(currentTarget())) return;
+        String name = "pasted-image-" + java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        enqueue(List.of(new Outgoing(null, image, name, Mode.IMAGE, target)));
+    }
+
+    private void enqueue(List<Outgoing> items) {
+        if (items.isEmpty()) return;
+        if (outgoing.size() + items.size() > MAX_QUEUED_UPLOADS) {
+            view.showMessage("Too many files are waiting. Send at most " + MAX_QUEUED_UPLOADS + " at a time.");
+            return;
+        }
+        outgoing.addAll(items);
+        startNextUpload();
+    }
+
+    private void startNextUpload() {
+        if (uploadId != null) return;
+        Outgoing item = outgoing.poll();
         var writer = model.output;
         String sender = model.activeId;
-        if (target == null || writer == null || sender == null || imageUploadId != null) return;
-        var file = view.choosePicture();
-        if (file == null || model.output != writer || !sender.equals(model.activeId)) return;
+        if (item == null || writer == null || sender == null) {
+            outgoing.clear();
+            view.setTransferStatus(null);
+            return;
+        }
         String id = java.util.UUID.randomUUID().toString();
-        imageUploadId = id;
-        view.setImageBusy(true);
-        var timeout = new javax.swing.Timer(125_000, event ->
-                finishImageUpload(id, "Image transfer timed out."));
-        timeout.setRepeats(false);
-        timeout.start();
+        uploadId = id;
+        view.setTransferStatus("Preparing " + item.name() + "..." + queuedSuffix());
+        uploadTimer = new javax.swing.Timer(250_000, event -> finishUpload(id, item.name() + ": transfer timed out."));
+        uploadTimer.setRepeats(false);
+        uploadTimer.start();
         Thread.ofVirtual().start(() -> {
             try {
-                ChatImages.send(writer, file, id, sender, destination, target);
+                Payload payload = prepare(item);
+                int[] shown = {-1};
+                ChatTransfers.send(writer, payload.wire(), payload.bytes(), payload.name(), id, sender,
+                        item.target().destination(), item.target().id(), percent -> {
+                            // 每 5% 更新一次，避免大量排入 Swing 事件。
+                            if (percent / 5 == shown[0]) return;
+                            shown[0] = percent / 5;
+                            SwingUtilities.invokeLater(() -> {
+                                if (id.equals(uploadId)) view.setTransferStatus("Sending " + payload.name()
+                                        + " (" + ChatFiles.size(payload.bytes().length) + ") " + percent + "%" + queuedSuffix());
+                            });
+                        });
+                SwingUtilities.invokeLater(() -> {
+                    if (id.equals(uploadId)) view.setTransferStatus("Delivering " + payload.name() + "..." + queuedSuffix());
+                });
             } catch (IOException exception) {
-                SwingUtilities.invokeLater(() -> finishImageUpload(id, exception.getMessage()));
+                SwingUtilities.invokeLater(() -> finishUpload(id, item.name() + ": " + exception.getMessage()));
             }
         });
     }
 
-    private void showImageResult(String line) {
-        String[] result = line.substring(ImageWire.RESULT.length()).split(":", 2);
-        if (result.length == 2) finishImageUpload(result[0], ChatProtocol.decode(result[1]));
+    private String queuedSuffix() {
+        return outgoing.isEmpty() ? "" : "  (" + outgoing.size() + " more waiting)";
     }
 
-    private void finishImageUpload(String id, String message) {
-        if (!id.equals(imageUploadId)) return;
-        imageUploadId = null;
-        view.setImageBusy(false);
-        if (!message.startsWith("Image queued for ")) appendMessage(message);
+    // 在背景執行緒讀取並決定傳送方式，避免大型檔案讓視窗停頓。
+    private static Payload prepare(Outgoing item) throws IOException {
+        Target target = item.target();
+        if (item.pasted() != null) {
+            if (!target.images()) throw new IOException("Images are not supported here.");
+            ImageFiles.Encoded encoded = ImageFiles.encodeForUpload(item.pasted());
+            ImageFiles.validate(encoded.bytes());
+            return new Payload(TransferWire.IMAGE, encoded.bytes(), item.name() + "." + encoded.extension());
+        }
+        if (item.mode() == Mode.IMAGE) {
+            if (!target.images()) throw new IOException("Images are not supported here.");
+            return new Payload(TransferWire.IMAGE, ImageFiles.read(item.path()), item.name());
+        }
+        IOException imageError = null;
+        if (item.mode() == Mode.AUTO && target.images() && ChatImages.hasImageName(item.name())) {
+            try {
+                return new Payload(TransferWire.IMAGE, ImageFiles.read(item.path()), item.name());
+            } catch (IOException exception) {
+                // 無法當作圖片時改用一般檔案傳送，例如超過圖片上限的大型照片。
+                imageError = exception;
+            }
+        }
+        if (!target.files()) {
+            throw imageError != null ? imageError
+                    : new IOException("This server only supports images. Update the server to send other files.");
+        }
+        return new Payload(TransferWire.FILE, ChatFiles.read(item.path()), item.name());
+    }
+
+    private void showTransferResult(String line) {
+        String prefix = line.startsWith(FileWire.RESULT) ? FileWire.RESULT : ImageWire.RESULT;
+        String[] result = line.substring(prefix.length()).split(":", 2);
+        if (result.length == 2) finishUpload(result[0], ChatProtocol.decode(result[1]));
+    }
+
+    private void finishUpload(String id, String message) {
+        if (!id.equals(uploadId)) return;
+        uploadId = null;
+        if (uploadTimer != null) uploadTimer.stop();
+        uploadTimer = null;
+        if (!message.startsWith("Image queued for ") && !message.startsWith("File queued for ")) appendMessage(message);
+        startNextUpload();
+    }
+
+    private void resetUploads() {
+        outgoing.clear();
+        uploadId = null;
+        if (uploadTimer != null) uploadTimer.stop();
+        uploadTimer = null;
+        view.setTransferStatus(null);
     }
 
     void sendMessage() {
@@ -478,6 +632,7 @@ final class ChatController {
         }
         model.observing = true;
         model.activeId = null;
+        resetUploads();
         model.output.println(ChatProtocol.LEAVE);
         model.groupHistory.clear();
         view.clearGroupChats();
@@ -489,9 +644,9 @@ final class ChatController {
     void disconnected(Socket closedSocket, String message) {
         if (model.socket == closedSocket || (model.socket == null && model.connecting)) {
             model.socket = null;
-        imageUploadId = null;
+        resetUploads();
         view.enableImages(false);
-        view.setImageBusy(false);
+        view.enableFiles(false);
             model.output = null;
             model.connecting = false;
             model.joining = false;
@@ -510,9 +665,9 @@ final class ChatController {
         model.connectionGeneration++;
         Socket oldSocket = model.socket;
         model.socket = null;
-        imageUploadId = null;
+        resetUploads();
         view.enableImages(false);
-        view.setImageBusy(false);
+        view.enableFiles(false);
         model.output = null;
         model.connecting = false;
         model.joining = false;

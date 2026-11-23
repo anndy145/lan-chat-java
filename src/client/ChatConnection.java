@@ -25,6 +25,7 @@ final class ChatConnection {
         output.println(ChatProtocol.OBSERVE);
         output.println(common.ImageWire.ENABLE);
         output.println(common.ImageWire.ENABLE_LOBBY);
+        output.println(common.FileWire.ENABLE);
         if (!observeOnly) output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
         connected.accept(output);
         String line;

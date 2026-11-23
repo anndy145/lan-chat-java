@@ -32,6 +32,21 @@ final class ChatModel {
         return true;
     }
 
+    // 收到的檔案保留在記憶體供另存，總量上限避免長時間使用耗盡記憶體。
+    boolean addAttachment(ChatFiles.Attachment attachment) {
+        long retained = java.util.stream.Stream.concat(java.util.stream.Stream.of(lobbyImages),
+                java.util.stream.Stream.concat(privateHistory.values().stream(), groupHistory.values().stream()))
+                .flatMap(List::stream).filter(ChatFiles.Attachment.class::isInstance)
+                .map(ChatFiles.Attachment.class::cast).mapToLong(item -> item.bytes().length).sum();
+        if (retained + attachment.bytes().length > 128L * 1024 * 1024) return false;
+        switch (attachment.destination()) {
+            case LOBBY -> lobbyImages.add(attachment);
+            case GROUP -> groupHistory.computeIfAbsent(attachment.conversation(), key -> new ArrayList<>()).add(attachment);
+            case PRIVATE -> privateHistory.computeIfAbsent(attachment.conversation(), key -> new ArrayList<>()).add(attachment);
+        }
+        return true;
+    }
+
     String addLobbyMessage(String text) {
         return lobbyHistory.append(text).append('\n').toString();
     }

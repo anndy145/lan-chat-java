@@ -1,5 +1,5 @@
 import common.ChatProtocol;
-import common.ImageChunks;
+import common.TransferChunks;
 import common.ImageWire;
 import server.Server;
 import java.awt.image.BufferedImage;
@@ -46,9 +46,9 @@ public class ImageTransferRegression {
 
         void finish(String transfer, byte[] bytes) {
             int sequence = 0;
-            for (int offset = 0; offset < bytes.length; offset += ImageChunks.CHUNK_BYTES) {
-                output.println(ImageWire.CHUNK + transfer + ":" + sequence++ + ":" + ImageChunks.encode(
-                        bytes, offset, Math.min(ImageChunks.CHUNK_BYTES, bytes.length - offset)));
+            for (int offset = 0; offset < bytes.length; offset += TransferChunks.CHUNK_BYTES) {
+                output.println(ImageWire.CHUNK + transfer + ":" + sequence++ + ":" + TransferChunks.encode(
+                        bytes, offset, Math.min(TransferChunks.CHUNK_BYTES, bytes.length - offset)));
             }
             output.println(ImageWire.END + transfer);
         }
@@ -57,7 +57,7 @@ public class ImageTransferRegression {
             String[] header = until(ImageWire.BEGIN).substring(ImageWire.BEGIN.length()).split(":");
             if (!header[1].equals(kind) || !header[2].equals(conversation)
                     || !ChatProtocol.decode(header[5]).equals("照片.png")) throw new AssertionError("Wrong metadata");
-            ImageChunks chunks = new ImageChunks(Integer.parseInt(header[6]));
+            TransferChunks chunks = new TransferChunks(Integer.parseInt(header[6]));
             String line;
             while ((line = input.readLine()) != null && !line.equals(ImageWire.END + header[0])) {
                 if (!line.startsWith(ImageWire.CHUNK + header[0] + ":")) continue;
@@ -131,7 +131,7 @@ public class ImageTransferRegression {
                     throw new AssertionError("Missing permission rejection");
 
                 transfer = alice.begin("p", bob.id, png.length);
-                alice.output.println(ImageWire.CHUNK + transfer + ":1:" + ImageChunks.encode(png, 0, 100));
+                alice.output.println(ImageWire.CHUNK + transfer + ":1:" + TransferChunks.encode(png, 0, 100));
                 if (!ChatProtocol.decode(alice.until(ImageWire.RESULT).split(":", 3)[2]).contains("Invalid chunk order"))
                     throw new AssertionError("Out-of-order upload accepted");
                 alice.output.println(ChatProtocol.GROUP_ADD + group + ":" + bob.id);
@@ -143,7 +143,7 @@ public class ImageTransferRegression {
 
                 try (Peer interrupted = new Peer(port, "Interrupted", true)) {
                     String partial = interrupted.begin("p", bob.id, png.length);
-                    interrupted.output.println(ImageWire.CHUNK + partial + ":0:" + ImageChunks.encode(png, 0, 8192));
+                    interrupted.output.println(ImageWire.CHUNK + partial + ":0:" + TransferChunks.encode(png, 0, 8192));
                 }
                 bob.output.println(ChatProtocol.SAY + ChatProtocol.encode("after disconnect"));
                 do {

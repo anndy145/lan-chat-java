@@ -5,17 +5,17 @@ import java.io.IOException;
 import java.util.Base64;
 
 /** 圖片與檔案區塊的大小與順序驗證。此類別不負責網路傳輸或授權。 */
-public final class ImageChunks {
+public final class TransferChunks {
     public static final int CHUNK_BYTES = 8 * 1024;
     private final int expectedBytes;
     private final ByteArrayOutputStream data;
     private int nextSequence;
 
-    public ImageChunks(int expectedBytes) {
+    public TransferChunks(int expectedBytes) {
         this(expectedBytes, ImageFiles.MAX_BYTES);
     }
 
-    public ImageChunks(int expectedBytes, int maxBytes) {
+    public TransferChunks(int expectedBytes, int maxBytes) {
         if (expectedBytes <= 0 || expectedBytes > maxBytes) {
             throw new IllegalArgumentException("Invalid size");
         }

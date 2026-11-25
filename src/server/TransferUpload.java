@@ -2,7 +2,7 @@ package server;
 
 import common.ChatProtocol;
 import common.FileWire;
-import common.ImageChunks;
+import common.TransferChunks;
 import common.ImageWire;
 import common.TransferWire;
 import java.io.IOException;
@@ -42,7 +42,7 @@ final class TransferUpload {
     private Pending pending;
 
     private record Pending(String id, String senderId, ImageWire.Destination destination, String target,
-                           String filename, ImageChunks chunks, Route route, long deadline, long senderVersion) {}
+                           String filename, TransferChunks chunks, Route route, long deadline, long senderVersion) {}
 
     TransferUpload(ClientSession sender, Server server, Kind kind) {
         this.sender = sender;
@@ -91,7 +91,7 @@ final class TransferUpload {
                 throw new IllegalArgumentException("Lobby images are not enabled.");
             String filename = ChatProtocol.decode(parts[4]);
             if (!ImageWire.validName(filename)) throw new IllegalArgumentException("Invalid filename.");
-            ImageChunks chunks = new ImageChunks(Integer.parseInt(parts[5]), wire.maxBytes());
+            TransferChunks chunks = new TransferChunks(Integer.parseInt(parts[5]), wire.maxBytes());
             Route route = server.imageRoute(sender, destination, parts[3]);
             if (route == null || (destination != ImageWire.Destination.LOBBY && route.recipients().isEmpty())) {
                 throw new IllegalArgumentException("No eligible recipients are online.");
@@ -169,10 +169,10 @@ final class TransferUpload {
                 + ":" + ChatProtocol.encode(upload.filename()) + ":" + bytes.length;
         if (!queue(upload, recipient, wire.begin() + header, deadline)) return false;
         int sequence = 0;
-        for (int offset = 0; offset < bytes.length; offset += ImageChunks.CHUNK_BYTES) {
-            int size = Math.min(ImageChunks.CHUNK_BYTES, bytes.length - offset);
+        for (int offset = 0; offset < bytes.length; offset += TransferChunks.CHUNK_BYTES) {
+            int size = Math.min(TransferChunks.CHUNK_BYTES, bytes.length - offset);
             if (!queue(upload, recipient, wire.chunk() + id + ":" + sequence++ + ":"
-                    + ImageChunks.encode(bytes, offset, size), deadline)) {
+                    + TransferChunks.encode(bytes, offset, size), deadline)) {
                 abort(recipient, id);
                 return false;
             }

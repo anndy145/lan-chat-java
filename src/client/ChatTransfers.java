@@ -1,7 +1,7 @@
 package client;
 
 import common.ChatProtocol;
-import common.ImageChunks;
+import common.TransferChunks;
 import common.ImageWire;
 import common.TransferWire;
 import java.io.IOException;
@@ -15,7 +15,7 @@ final class ChatTransfers {
     record Received(ImageWire.Destination destination, String conversation, String title, String sender,
                     String filename, byte[] bytes) {}
 
-    private record Incoming(String[] header, ImageChunks body) {}
+    private record Incoming(String[] header, TransferChunks body) {}
 
     private final TransferWire wire;
     private final Map<String, Incoming> incoming = new HashMap<>();
@@ -32,9 +32,9 @@ final class ChatTransfers {
         output.println(wire.begin() + id + ":" + sender + ":" + destination.code()
                 + ":" + target + ":" + ChatProtocol.encode(name) + ":" + bytes.length);
         int sequence = 0;
-        for (int offset = 0; offset < bytes.length; offset += ImageChunks.CHUNK_BYTES) {
-            int size = Math.min(ImageChunks.CHUNK_BYTES, bytes.length - offset);
-            output.println(wire.chunk() + id + ":" + sequence++ + ":" + ImageChunks.encode(bytes, offset, size));
+        for (int offset = 0; offset < bytes.length; offset += TransferChunks.CHUNK_BYTES) {
+            int size = Math.min(TransferChunks.CHUNK_BYTES, bytes.length - offset);
+            output.println(wire.chunk() + id + ":" + sequence++ + ":" + TransferChunks.encode(bytes, offset, size));
             if (output.checkError()) throw new IOException("Connection closed.");
             progress.accept((int) ((offset + (long) size) * 100 / bytes.length));
         }
@@ -53,7 +53,7 @@ final class ChatTransfers {
         try {
             if (line.startsWith(wire.begin())) {
                 if (fields.length != 7 || incoming.size() >= 4) throw new IOException("Invalid transfer header.");
-                incoming.put(id, new Incoming(fields, new ImageChunks(Integer.parseInt(fields[6]), wire.maxBytes())));
+                incoming.put(id, new Incoming(fields, new TransferChunks(Integer.parseInt(fields[6]), wire.maxBytes())));
             } else if (line.startsWith(wire.chunk())) {
                 Incoming transfer = incoming.get(id);
                 if (transfer != null) {

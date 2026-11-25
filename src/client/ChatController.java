@@ -32,16 +32,24 @@ final class ChatController {
     void connectAction() {
         if (model.observing && model.output != null) {
             String name = view.name();
-            if (name.isEmpty()) {
-                view.showMessage("Please enter a name.");
-            } else if (name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
-                view.showMessage("Name must be at most 32 characters.");
-            } else {
-                model.output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
-                model.joining = true;
-                view.setConnected(false);
-            }
+            if (!validateName(name, false)) return;
+            model.output.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
+            model.joining = true;
+            view.setConnected(false);
         } else connect(false);
+    }
+
+    private boolean validateName(String name, boolean focusOnError) {
+        String error = null;
+        if (name.isEmpty()) {
+            error = "Please enter a name.";
+        } else if (name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
+            error = "Name must be at most 32 characters.";
+        }
+        if (error == null) return true;
+        view.showMessage(error);
+        if (focusOnError) view.focusName();
+        return false;
     }
 
     void viewUsersAction() {
@@ -143,17 +151,7 @@ final class ChatController {
             view.focusPort();
             return;
         }
-        if (!observeOnly && name.isEmpty()) {
-            view.showMessage("Please enter a name.");
-            view.focusName();
-            return;
-        }
-
-        if (!observeOnly && name.codePointCount(0, name.length()) > ChatProtocol.MAX_NAME_LENGTH) {
-            view.showMessage("Name must be at most 32 characters.");
-            view.focusName();
-            return;
-        }
+        if (!observeOnly && !validateName(name, true)) return;
 
         model.connecting = true;
         clearConversationHistory();
@@ -402,12 +400,12 @@ final class ChatController {
         if ("/quit".equalsIgnoreCase(message.strip())) {
             leaveChat();
         } else if (view.isLobbySelected()) {
-            model.output.println(ChatProtocol.SAY + encode(message));
+            model.output.println(ChatProtocol.SAY + ChatProtocol.encode(message));
         } else if (view.selectedGroupId() != null) {
-            model.output.println(ChatProtocol.GROUP_SEND + view.selectedGroupId() + ":" + encode(message));
+            model.output.println(ChatProtocol.GROUP_SEND + view.selectedGroupId() + ":" + ChatProtocol.encode(message));
         } else {
             String targetId = view.selectedPrivateId();
-            if (targetId != null) model.output.println(ChatProtocol.PRIVATE + targetId + ":" + encode(message));
+            if (targetId != null) model.output.println(ChatProtocol.PRIVATE + targetId + ":" + ChatProtocol.encode(message));
         }
     }
 
@@ -444,7 +442,7 @@ final class ChatController {
             view.showMessage("Enter a group name of up to 80 characters.");
             return;
         }
-        model.output.println(ChatProtocol.GROUP_CREATE + encode(name) + ":"
+        model.output.println(ChatProtocol.GROUP_CREATE + ChatProtocol.encode(name) + ":"
                 + String.join(",", members));
     }
 
@@ -503,10 +501,6 @@ final class ChatController {
 
     private void appendMessage(String message) {
         view.appendMessage(model.addLobbyMessage(message));
-    }
-
-    private static String encode(String text) {
-        return ChatProtocol.encode(text);
     }
 
     private void receiveGroup(String message) {

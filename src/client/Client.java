@@ -61,7 +61,7 @@ public class Client {
             serverOutput.println(ChatProtocol.OBSERVE);
             if (!name.equals("--observe")) {
                 state.mode = Mode.JOINING;
-                serverOutput.println(ChatProtocol.JOIN + encode(name));
+                serverOutput.println(ChatProtocol.JOIN + ChatProtocol.encode(name));
             } else {
                 System.out.println("Observing online users. Type /join <name> to join or /quit to exit.");
             }
@@ -163,7 +163,7 @@ public class Client {
                 System.out.println("Usage: /join <name> (1 to 32 characters)");
             } else {
                 state.mode = Mode.JOINING;
-                output.println(ChatProtocol.JOIN + encode(name.strip()));
+                output.println(ChatProtocol.JOIN + ChatProtocol.encode(name.strip()));
             }
         }
     }
@@ -188,7 +188,7 @@ public class Client {
         } else if (parts[1].codePointCount(0, parts[1].length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
             System.out.println("Message must be at most 2000 characters.");
         } else {
-            output.println(ChatProtocol.GROUP_SEND + parts[0] + ":" + encode(parts[1]));
+            output.println(ChatProtocol.GROUP_SEND + parts[0] + ":" + ChatProtocol.encode(parts[1]));
         }
     }
 
@@ -196,7 +196,7 @@ public class Client {
         if (message.codePointCount(0, message.length()) > ChatProtocol.MAX_MESSAGE_LENGTH) {
             System.out.println("Message must be at most 2000 characters.");
         } else {
-            output.println(ChatProtocol.SAY + encode(message));
+            output.println(ChatProtocol.SAY + ChatProtocol.encode(message));
         }
     }
 
@@ -268,11 +268,7 @@ public class Client {
                 return;
             }
         }
-        output.println(ChatProtocol.PRIVATE + id + ":" + encode(text));
-    }
-
-    private static String encode(String text) {
-        return ChatProtocol.encode(text);
+        output.println(ChatProtocol.PRIVATE + id + ":" + ChatProtocol.encode(text));
     }
 
     private static void receiveMessages(BufferedReader serverInput, AtomicBoolean leaving, ChatState state) {

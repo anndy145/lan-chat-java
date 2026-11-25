@@ -2,6 +2,7 @@ package server;
 
 import common.ChatProtocol;
 import common.ImageWire;
+import common.TransferWire;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -182,7 +183,7 @@ class ClientSession implements Runnable {
     }
 
     // 圖片轉送使用有期限的重試，佇列滿時保留一般聊天的處理能力。
-    boolean offerImage(byte[] bytes) {
+    boolean offerTransfer(byte[] bytes) {
         synchronized (outboundLock) {
             if (closing.get() || bytes.length > MAX_PENDING_BYTES - 128 * 1024 - pendingBytes
                     || outbound.remainingCapacity() <= 16 || !outbound.offer(bytes)) {
@@ -259,8 +260,8 @@ class ClientSession implements Runnable {
         this.name = name;
     }
 
-    long imageRouteVersion(ImageWire.Destination destination) {
-        return destination == ImageWire.Destination.LOBBY ? activeVersion : groupDepartureVersion;
+    long transferRouteVersion(TransferWire.Destination destination) {
+        return destination == TransferWire.Destination.LOBBY ? activeVersion : groupDepartureVersion;
     }
 
     boolean isActive() {

@@ -729,7 +729,7 @@ public class ChatWindow extends JFrame {
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION;
     }
 
-    private JScrollPane conversationScroll(common.ImageWire.Destination destination, String conversation, String title) {
+    private JScrollPane conversationScroll(common.TransferWire.Destination destination, String conversation, String title) {
         return switch (destination) {
             case LOBBY -> (JScrollPane) chats.getComponentAt(0);
             case GROUP -> groupChat(conversation, title);

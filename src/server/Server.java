@@ -2,6 +2,7 @@ package server;
 
 import common.ChatProtocol;
 import common.ImageWire;
+import common.TransferWire;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -305,9 +306,9 @@ public class Server implements AutoCloseable {
         group.members.forEach(member -> member.send(announcement));
     }
 
-    synchronized TransferUpload.Route imageRoute(ClientSession sender, ImageWire.Destination destination, String target) {
+    synchronized TransferUpload.Route transferRoute(ClientSession sender, TransferWire.Destination destination, String target) {
         if (!clients.contains(sender) || !sender.isActive() || sender.isClosing()) return null;
-        if (destination == ImageWire.Destination.GROUP) {
+        if (destination == TransferWire.Destination.GROUP) {
             ChatGroup group = groups.get(target);
             if (group == null || !group.members.contains(sender)) return null;
             return new TransferUpload.Route(group.name, group.members.stream()
@@ -315,12 +316,12 @@ public class Server implements AutoCloseable {
                     .map(member -> new TransferUpload.Recipient(member, member.getUserId(), target, group.name, member.groupDepartureVersion))
                     .toList());
         }
-        if (destination == ImageWire.Destination.LOBBY) {
-            if (!ImageWire.LOBBY_TARGET.equals(target)) return null;
-            return new TransferUpload.Route(ImageWire.LOBBY_TITLE, clients.stream()
+        if (destination == TransferWire.Destination.LOBBY) {
+            if (!TransferWire.LOBBY_TARGET.equals(target)) return null;
+            return new TransferUpload.Route(TransferWire.LOBBY_TITLE, clients.stream()
                     .filter(peer -> peer != sender && peer.isActive() && !peer.isClosing())
-                    .map(peer -> new TransferUpload.Recipient(peer, peer.getUserId(), target, ImageWire.LOBBY_TITLE,
-                            peer.imageRouteVersion(destination)))
+                    .map(peer -> new TransferUpload.Recipient(peer, peer.getUserId(), target, TransferWire.LOBBY_TITLE,
+                            peer.transferRouteVersion(destination)))
                     .toList());
         }
         return clients.stream().filter(peer -> peer != sender && peer.isActive()
@@ -330,20 +331,20 @@ public class Server implements AutoCloseable {
                 .orElse(null);
     }
 
-    synchronized int queueImage(ClientSession sender, String senderId, long senderVersion, ImageWire.Destination destination, String target,
+    synchronized int queueTransfer(ClientSession sender, String senderId, long senderVersion, TransferWire.Destination destination, String target,
                                 TransferUpload.Recipient recipient, byte[] frame) {
         ClientSession peer = recipient.session();
         if (!clients.contains(sender) || !sender.isActive() || sender.isClosing()
                 || !senderId.equals(sender.getUserId()) || !clients.contains(peer) || !peer.isActive()
                 || peer.isClosing() || !recipient.id().equals(peer.getUserId())) return -1;
-        if (destination == ImageWire.Destination.GROUP) {
+        if (destination == TransferWire.Destination.GROUP) {
             ChatGroup group = groups.get(target);
             if (group == null || !group.members.contains(sender) || !group.members.contains(peer)) return -1;
         }
-        if (destination != ImageWire.Destination.PRIVATE
-                && (senderVersion != sender.imageRouteVersion(destination)
-                    || recipient.routeVersion() != peer.imageRouteVersion(destination))) return -1;
-        return peer.offerImage(frame) ? 1 : 0;
+        if (destination != TransferWire.Destination.PRIVATE
+                && (senderVersion != sender.transferRouteVersion(destination)
+                    || recipient.routeVersion() != peer.transferRouteVersion(destination))) return -1;
+        return peer.offerTransfer(frame) ? 1 : 0;
     }
 
     public synchronized void sendGroup(ClientSession sender, String id, String text) {

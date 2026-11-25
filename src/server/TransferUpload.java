@@ -41,7 +41,7 @@ final class TransferUpload {
     private final TransferWire wire;
     private Pending pending;
 
-    private record Pending(String id, String senderId, ImageWire.Destination destination, String target,
+    private record Pending(String id, String senderId, TransferWire.Destination destination, String target,
                            String filename, TransferChunks chunks, Route route, long deadline, long senderVersion) {}
 
     TransferUpload(ClientSession sender, Server server, Kind kind) {
@@ -86,20 +86,20 @@ final class TransferUpload {
             if (parts.length != 6 || !parts[1].equals(sender.getUserId())) {
                 throw new IllegalArgumentException("Invalid request.");
             }
-            var destination = ImageWire.Destination.fromCode(parts[2]);
-            if (kind == Kind.IMAGE && destination == ImageWire.Destination.LOBBY && !sender.receivesLobbyImages)
+            var destination = TransferWire.Destination.fromCode(parts[2]);
+            if (kind == Kind.IMAGE && destination == TransferWire.Destination.LOBBY && !sender.receivesLobbyImages)
                 throw new IllegalArgumentException("Lobby images are not enabled.");
             String filename = ChatProtocol.decode(parts[4]);
-            if (!ImageWire.validName(filename)) throw new IllegalArgumentException("Invalid filename.");
+            if (!TransferWire.validName(filename)) throw new IllegalArgumentException("Invalid filename.");
             TransferChunks chunks = new TransferChunks(Integer.parseInt(parts[5]), wire.maxBytes());
-            Route route = server.imageRoute(sender, destination, parts[3]);
-            if (route == null || (destination != ImageWire.Destination.LOBBY && route.recipients().isEmpty())) {
+            Route route = server.transferRoute(sender, destination, parts[3]);
+            if (route == null || (destination != TransferWire.Destination.LOBBY && route.recipients().isEmpty())) {
                 throw new IllegalArgumentException("No eligible recipients are online.");
             }
             if (!kind.slots.tryAcquire())
                 throw new IllegalArgumentException("Server is busy with other uploads. Try again.");
             pending = new Pending(id, parts[1], destination, parts[3], filename, chunks, route,
-                    System.nanoTime() + kind.timeout, sender.imageRouteVersion(destination));
+                    System.nanoTime() + kind.timeout, sender.transferRouteVersion(destination));
         } catch (IllegalArgumentException exception) {
             result(id, wire.label() + " rejected: " + exception.getMessage());
         }
@@ -134,7 +134,7 @@ final class TransferUpload {
                 }
             }
             boolean senderReceives = kind == Kind.IMAGE ? sender.receivesImages : sender.receivesFiles;
-            if ((upload.destination() == ImageWire.Destination.LOBBY || delivered + notices > 0) && senderReceives) {
+            if ((upload.destination() == TransferWire.Destination.LOBBY || delivered + notices > 0) && senderReceives) {
                 relay(upload, new Recipient(sender, upload.senderId(), upload.target(),
                         upload.route().title(), upload.senderVersion()), relayId, bytes, deadline);
             }
@@ -152,7 +152,7 @@ final class TransferUpload {
         ClientSession session = recipient.session();
         if (kind == Kind.FILE) return session.receivesFiles;
         return session.receivesImages
-                && (upload.destination() != ImageWire.Destination.LOBBY || session.receivesLobbyImages);
+                && (upload.destination() != TransferWire.Destination.LOBBY || session.receivesLobbyImages);
     }
 
     private boolean relay(Pending upload, Recipient recipient, String id, byte[] bytes, long deadline) {
@@ -160,7 +160,7 @@ final class TransferUpload {
             // 舊版或命令列 Client 都看得懂圖片提示，因此一般檔案也使用同一種提示。
             return queue(upload, recipient, ImageWire.NOTICE + ChatProtocol.encode(
                     wire.label() + " from " + sender.getName()
-                            + (upload.destination() != ImageWire.Destination.PRIVATE ? " in " + recipient.title() : "")
+                            + (upload.destination() != TransferWire.Destination.PRIVATE ? " in " + recipient.title() : "")
                             + ": " + upload.filename()), deadline);
         }
         String header = id + ":" + upload.destination().code()
@@ -191,7 +191,7 @@ final class TransferUpload {
         long remaining = Math.min(deadline - System.nanoTime(), QUEUE_TIMEOUT);
         long until = System.nanoTime() + remaining;
         while (System.nanoTime() - until < 0) {
-            int queued = server.queueImage(sender, upload.senderId(), upload.senderVersion(), upload.destination(), upload.target(), recipient, frame);
+            int queued = server.queueTransfer(sender, upload.senderId(), upload.senderVersion(), upload.destination(), upload.target(), recipient, frame);
             if (queued != 0) return queued > 0;
             // 等候佇列空間時不持有 Server 的鎖。
             LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));

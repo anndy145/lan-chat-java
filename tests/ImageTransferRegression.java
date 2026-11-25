@@ -1,6 +1,7 @@
 import common.ChatProtocol;
 import common.TransferChunks;
 import common.ImageWire;
+import common.TransferWire;
 import server.Server;
 import java.awt.image.BufferedImage;
 import java.io.*;
@@ -97,9 +98,9 @@ public class ImageTransferRegression {
                 alice.until(ImageWire.READY_LOBBY);
                 bob.output.println(ImageWire.ENABLE_LOBBY);
                 bob.until(ImageWire.READY_LOBBY);
-                alice.finish(alice.begin("l", ImageWire.LOBBY_TARGET, png.length), png);
-                bob.expectImage("l", ImageWire.LOBBY_TARGET, png);
-                alice.expectImage("l", ImageWire.LOBBY_TARGET, png);
+                alice.finish(alice.begin("l", TransferWire.LOBBY_TARGET, png.length), png);
+                bob.expectImage("l", TransferWire.LOBBY_TARGET, png);
+                alice.expectImage("l", TransferWire.LOBBY_TARGET, png);
                 String lobbyNotice = ChatProtocol.decode(cli.until(ImageWire.NOTICE).substring(ImageWire.NOTICE.length()));
                 if (!lobbyNotice.contains("Alice in Lobby")) throw new AssertionError(lobbyNotice);
                 alice.until(ImageWire.RESULT);

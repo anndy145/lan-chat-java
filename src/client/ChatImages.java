@@ -8,7 +8,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 final class ChatImages {
-    record Picture(ImageWire.Destination destination, String conversation, String title, String sender,
+    record Picture(TransferWire.Destination destination, String conversation, String title, String sender,
                    String filename, byte[] bytes, BufferedImage thumbnail) implements ChatModel.Entry {}
 
     private final ChatTransfers transfers = new ChatTransfers(TransferWire.IMAGE);

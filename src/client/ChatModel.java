@@ -24,7 +24,7 @@ final class ChatModel {
                 .flatMap(List::stream).filter(type::isInstance).map(type::cast).mapToLong(sizeOf).sum();
     }
 
-    private void addEntry(common.ImageWire.Destination destination, String conversation, Entry entry) {
+    private void addEntry(common.TransferWire.Destination destination, String conversation, Entry entry) {
         switch (destination) {
             case LOBBY -> lobbyEntries.add(entry);
             case GROUP -> groupHistory.computeIfAbsent(conversation, key -> new ArrayList<>()).add(entry);

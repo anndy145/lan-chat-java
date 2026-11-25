@@ -9,7 +9,7 @@ import java.nio.file.Path;
 
 /** 一般檔案的讀取與接收。收到的檔案只保留在記憶體，使用者選擇另存時才寫入磁碟。 */
 final class ChatFiles {
-    record Attachment(ImageWire.Destination destination, String conversation, String title, String sender,
+    record Attachment(TransferWire.Destination destination, String conversation, String title, String sender,
                       String filename, byte[] bytes) implements ChatModel.Entry {}
 
     private final ChatTransfers transfers = new ChatTransfers(TransferWire.FILE);

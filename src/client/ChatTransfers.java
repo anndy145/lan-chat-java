@@ -12,7 +12,7 @@ import java.util.function.IntConsumer;
 
 /** 圖片與一般檔案共用的分塊傳送與接收；不負責畫面更新。 */
 final class ChatTransfers {
-    record Received(ImageWire.Destination destination, String conversation, String title, String sender,
+    record Received(TransferWire.Destination destination, String conversation, String title, String sender,
                     String filename, byte[] bytes) {}
 
     private record Incoming(String[] header, TransferChunks body) {}
@@ -26,8 +26,8 @@ final class ChatTransfers {
 
     /** 依序送出 BEGIN、所有區塊與 END；progress 收到 0 到 100 的百分比。 */
     static void send(PrintWriter output, TransferWire wire, byte[] bytes, String name, String id, String sender,
-                     ImageWire.Destination destination, String target, IntConsumer progress) throws IOException {
-        if (!ImageWire.validName(name)) throw new IOException("Invalid filename.");
+                     TransferWire.Destination destination, String target, IntConsumer progress) throws IOException {
+        if (!TransferWire.validName(name)) throw new IOException("Invalid filename.");
         if (bytes.length == 0 || bytes.length > wire.maxBytes()) throw new IOException("Invalid size.");
         output.println(wire.begin() + id + ":" + sender + ":" + destination.code()
                 + ":" + target + ":" + ChatProtocol.encode(name) + ":" + bytes.length);
@@ -66,8 +66,8 @@ final class ChatTransfers {
                     String[] header = transfer.header();
                     byte[] bytes = transfer.body().finishBytes();
                     String filename = ChatProtocol.decode(header[5]);
-                    if (!ImageWire.validName(filename)) throw new IOException("Invalid filename.");
-                    return new Received(ImageWire.Destination.fromCode(header[1]), header[2],
+                    if (!TransferWire.validName(filename)) throw new IOException("Invalid filename.");
+                    return new Received(TransferWire.Destination.fromCode(header[1]), header[2],
                             ChatProtocol.decode(header[3]), ChatProtocol.decode(header[4]), filename, bytes);
                 }
             } else {

@@ -221,7 +221,7 @@ final class ChatController {
     // 傳送佇列：圖片按鈕、檔案按鈕、拖曳與貼上都依序上傳，目標在加入佇列時決定。
     private enum Mode { IMAGE, FILE, AUTO }
 
-    private record Target(ImageWire.Destination destination, String id, String title, boolean images, boolean files) {}
+    private record Target(TransferWire.Destination destination, String id, String title, boolean images, boolean files) {}
 
     private record Outgoing(Path path, java.awt.Image pasted, String name, Mode mode, Target target) {}
 
@@ -232,9 +232,9 @@ final class ChatController {
     private Target currentTarget() {
         String group = view.selectedGroupId();
         boolean lobby = view.isLobbySelected();
-        var destination = lobby ? ImageWire.Destination.LOBBY
-                : group != null ? ImageWire.Destination.GROUP : ImageWire.Destination.PRIVATE;
-        String target = lobby ? ImageWire.LOBBY_TARGET : group == null ? view.selectedPrivateId() : group;
+        var destination = lobby ? TransferWire.Destination.LOBBY
+                : group != null ? TransferWire.Destination.GROUP : TransferWire.Destination.PRIVATE;
+        String target = lobby ? TransferWire.LOBBY_TARGET : group == null ? view.selectedPrivateId() : group;
         if (target == null || model.output == null || model.activeId == null || model.observing) return null;
         return new Target(destination, target, view.selectedChatTitle(), view.imagesAllowedHere(), view.filesAllowed());
     }
